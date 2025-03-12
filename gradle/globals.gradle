@@ -25,6 +25,7 @@ allprojects {
   // Repositories to fetch dependencies from.
   repositories {
     mavenCentral()
+    mavenLocal()
     /* Reenable this if we need it again in future
     maven {
       name "LucenePrerelease${lucenePrereleaseBuild}"
