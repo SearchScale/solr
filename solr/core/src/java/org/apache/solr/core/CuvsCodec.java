@@ -40,8 +40,6 @@ public class CuvsCodec extends FilterCodec {
         cuvsVectorsFormat = new CuVSVectorsFormat(Integer.parseInt(args._getStr("cuvsWriterThreads", "1")),
                 Integer.parseInt(args._getStr("intGraphDegree", "1")),
                 Integer.parseInt(args._getStr("graphDegree", "1")),
-                CuVSVectorsWriter.MergeStrategy.valueOf(args._getStr("mergeStrategy",
-                        CuVSVectorsWriter.MergeStrategy.TRIVIAL_MERGE.toString())),
                 CuVSVectorsWriter.IndexType.CAGRA);
 
         log.info("Created the CuVS Vectors Format: " + cuvsVectorsFormat);

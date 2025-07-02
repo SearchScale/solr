@@ -25,6 +25,9 @@ allprojects {
   // Repositories to fetch dependencies from.
   repositories {
     mavenCentral()
+    maven {         
+        url = uri("https://maven.searchscale.com/snapshots")
+    }
     mavenLocal()
     /* Reenable this if we need it again in future
     maven {
