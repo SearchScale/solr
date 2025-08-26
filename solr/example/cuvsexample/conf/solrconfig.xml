@@ -24,7 +24,7 @@
 <!-- a basic solrconfig that tests can use when they want simple minimal solrconfig/schema
      DO NOT ADD THINGS TO THIS CONFIG! -->
 <config>
-    <luceneMatchVersion>${tests.luceneMatchVersion:LATEST}</luceneMatchVersion>
+    <luceneMatchVersion>10.2</luceneMatchVersion>
     <dataDir>${solr.data.dir:}</dataDir>
     <directoryFactory name="DirectoryFactory" class="${solr.directoryFactory:solr.NRTCachingDirectoryFactory}"/>
 
