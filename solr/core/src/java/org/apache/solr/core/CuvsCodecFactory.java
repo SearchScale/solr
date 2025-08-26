@@ -7,34 +7,34 @@ import org.apache.solr.util.plugin.SolrCoreAware;
 
 public class CuvsCodecFactory extends CodecFactory implements SolrCoreAware {
 
-    private final SchemaCodecFactory fallback;
-    private SolrCore core;
-    NamedList<?> args;
-    Lucene101Codec fallbackCodec;
-    CuvsCodec codec;
+  private final SchemaCodecFactory fallback;
+  private SolrCore core;
+  NamedList<?> args;
+  Lucene101Codec fallbackCodec;
+  CuvsCodec codec;
 
-    public CuvsCodecFactory() {
-        this.fallback =  new SchemaCodecFactory();;
-    }
+  public CuvsCodecFactory() {
+    this.fallback = new SchemaCodecFactory();
+  }
 
-    @Override
-    public Codec getCodec() {
-        if(codec == null) {
-            codec = new CuvsCodec(core, fallbackCodec, args);
-        }
-        return codec;
+  @Override
+  public Codec getCodec() {
+    if (codec == null) {
+      codec = new CuvsCodec(core, fallbackCodec, args);
     }
+    return codec;
+  }
 
-    @Override
-    public void inform(SolrCore solrCore) {
-        this.core = solrCore;
-        fallback.inform(solrCore);
-    }
+  @Override
+  public void inform(SolrCore solrCore) {
+    this.core = solrCore;
+    fallback.inform(solrCore);
+  }
 
-    @Override
-    public void init(NamedList<?> args) {
-        fallback.init(args);
-        this.args = args;
-        fallbackCodec = (Lucene101Codec) fallback.getCodec();
-    }
+  @Override
+  public void init(NamedList<?> args) {
+    fallback.init(args);
+    this.args = args;
+    fallbackCodec = (Lucene101Codec) fallback.getCodec();
+  }
 }
