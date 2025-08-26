@@ -199,6 +199,8 @@ threeten-bp = "1.6.8"
 undercouch-download = "5.5.0"
 xerces = "2.12.2"
 xerial-snappy = "1.1.10.5"
+cuvs-java = "25.10.0-d0a83-SNAPSHOT"
+cuvs-lucene = "0.0.1-950e4-SNAPSHOT"
 
 [plugins]
 benmanes-versions = { id = "com.github.ben-manes.versions", version.ref = "benmanes-versions" }
@@ -513,3 +515,5 @@ thisptr-jacksonjq = { module = "net.thisptr:jackson-jq", version.ref = "thisptr-
 threeten-bp = { module = "org.threeten:threetenbp", version.ref = "threeten-bp" }
 xerces-impl = { module = "xerces:xercesImpl", version.ref = "xerces" }
 xerial-snappy-java = { module = "org.xerial.snappy:snappy-java", version.ref = "xerial-snappy" }
+cuvs-java = { module = "com.nvidia.cuvs:cuvs-java", version.ref = "cuvs-java" }
+cuvs-lucene = { module = "com.nvidia.cuvs.lucene:cuvs-lucene", version.ref = "cuvs-lucene" }
