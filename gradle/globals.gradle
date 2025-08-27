@@ -24,6 +24,10 @@ allprojects {
 
   // Repositories to fetch dependencies from.
   repositories {
+    maven {
+      name "SearchScale"
+      url "https://maven.searchscale.com/snapshots"
+    }
     mavenCentral()
     /* Reenable this if we need it again in future
     maven {
