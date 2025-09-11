@@ -513,3 +513,166 @@ Details about using the ReRank Query Parser can be found in the xref:query-guide
 
 * Blog: https://sease.io/2022/01/apache-solr-neural-search.html
 * Blog: https://sease.io/2022/01/apache-solr-neural-search-knn-benchmark.html
+
+== GPU Acceleration
+
+[NOTE]
+This is feature is currently experimental.
+
+This acceleration is achieved with the help of the `cuvs` module in Solr. 
+The `cuvs` module consists of a `CuVSCodec` that uses the `Lucene99AcceleratedHNSWVectorsFormat` from https://github.com/rapidsai/cuvs-lucene[cuVS-Lucene], a pluggable library for Apache Lucene.
+cuVS-Lucene uses the https://arxiv.org/abs/2308.15136[CAGRA algorithm] for GPU based acceleration via the https://github.com/rapidsai/cuvs/tree/branch-25.10/[cuVS-Java API] from
+the https://docs.rapids.ai/api/cuvs/stable/#[Nvidia's cuVS library] which is the GPU based vector search library.
+https://developer.nvidia.com/cuda-downloads[CUDA 13.0+] and https://jdk.java.net/archive/[JDK 22] are required to use this feature.
+
+Copy the module jar files
+
+[source,sh]
+----
+cp modules/cuvs/lib/*.jar server/solr-webapp/webapp/WEB-INF/lib/
+----
+
+Define the fieldType in the schema 
+
+[source,xml]
+----
+<fieldType name="knn_vector" class="solr.DenseVectorField" vectorDimension="8" knnAlgorithm="cagra_hnsw" similarityFunction="cosine" />
+----
+
+Declare the xref:configuration-guide:codec-factory.adoc[codecFactory] in xref:configuration-guide:configuring-solrconfig-xml.adoc[solrconfig.xml]
+
+[source,xml]
+----
+<codecFactory name="CuvsCodecFactory" class="org.apache.solr.cuvs.CuvsCodecFactory">
+    <str name="cuvsWriterThreads">32</str>
+    <str name="intGraphDegree">128</str>
+    <str name="graphDegree">64</str>
+    <str name="hnswLayers">1</str>
+</codecFactory>
+----
+
+Where:
+
+* `cuvsWriterThreads` - number of threads to use
+
+* `intGraphDegree` - Intermediate graph degree for building the CAGRA index
+
+* `graphDegree` - Graph degree for building the CAGRA index
+
+* `hnswLayers` - Number of HNSW graph layers to construct while building the HNSW index
+
+=== Example
+
+Following is a step-by-step example.
+
+Copy the `cuvs` module jar files (before starting Solr).
+
+[source,sh]
+----
+cp modules/cuvs/lib/*.jar server/solr-webapp/webapp/WEB-INF/lib/
+----
+
+Create the configset
+
+[source,sh]
+----
+mkdir -p /tmp/cuvs_configset/conf
+----
+
+[source,sh]
+----
+cat > /tmp/cuvs_configset/conf/solrconfig.xml << 'EOF'
+<?xml version="1.0" ?>
+<config>
+    <luceneMatchVersion>10.0.0</luceneMatchVersion>
+    <dataDir>${solr.data.dir:}</dataDir>
+    <directoryFactory name="DirectoryFactory" class="${solr.directoryFactory:solr.NRTCachingDirectoryFactory}"/>
+    
+    <updateHandler class="solr.DirectUpdateHandler2">
+        <updateLog>
+            <str name="dir">${solr.ulog.dir:}</str>
+        </updateLog>
+        <autoCommit>
+            <maxTime>${solr.autoCommit.maxTime:15000}</maxTime>
+            <openSearcher>false</openSearcher>
+        </autoCommit>
+        <autoSoftCommit>
+            <maxTime>${solr.autoSoftCommit.maxTime:1000}</maxTime>
+        </autoSoftCommit>
+    </updateHandler>
+
+    <codecFactory name="CuvsCodecFactory" class="org.apache.solr.cuvs.CuvsCodecFactory">
+        <str name="cuvsWriterThreads">32</str>
+        <str name="intGraphDegree">128</str>
+        <str name="graphDegree">64</str>
+        <str name="hnswLayers">1</str>
+    </codecFactory>
+
+    <requestHandler name="/select" class="solr.SearchHandler">
+        <lst name="defaults">
+            <str name="echoParams">explicit</str>
+            <int name="rows">10</int>
+        </lst>
+    </requestHandler>
+    
+    <requestHandler name="/update" class="solr.UpdateRequestHandler" />
+</config>
+EOF
+----
+
+[source,sh]
+----
+cat > /tmp/cuvs_configset/conf/managed-schema << 'EOF'
+<?xml version="1.0" ?>
+<schema name="schema-densevector" version="1.7">
+    <fieldType name="string" class="solr.StrField" multiValued="true"/>
+    <fieldType name="knn_vector" class="solr.DenseVectorField" 
+               vectorDimension="8" 
+               knnAlgorithm="cagra_hnsw" 
+               similarityFunction="cosine" />
+    <fieldType name="plong" class="solr.LongPointField" useDocValuesAsStored="false"/>
+
+    <field name="id" type="string" indexed="true" stored="true" multiValued="false" required="false"/>
+    <field name="article_vector" type="knn_vector" indexed="true" stored="true"/>
+    <field name="_version_" type="plong" indexed="true" stored="true" multiValued="false" />
+    
+    <uniqueKey>id</uniqueKey>
+</schema>
+EOF
+----
+
+Start Solr
+
+[source,sh]
+----
+./bin/solr start
+----
+
+Upload the configset and create a collection
+
+[source,sh]
+----
+./bin/solr zk upconfig -n cuvs_vectors -d /tmp/cuvs_configset/conf && ./bin/solr create -c vectors -n cuvs_vectors
+----
+
+Index documents
+
+[source,sh]
+----
+curl -s -X POST "http://localhost:8983/solr/vectors/update?commit=true" \
+     -H "Content-Type: application/json" \
+     -d '[
+       {"id": "doc1", "article_vector": [0.35648, 0.11664, 0.85660, 0.25043, 0.80778, 0.08031, 0.48444, 0.39083]},
+       {"id": "doc2", "article_vector": [0.86821, 0.24947, 0.38601, 0.22615, 0.31498, 0.74612, 0.69403, 0.19691]},
+       {"id": "doc3", "article_vector": [0.34098, 0.49236, 0.35950, 0.17840, 0.49470, 0.97242, 0.28249, 0.72526]},
+       {"id": "doc4", "article_vector": [0.44979, 0.49473, 0.47197, 0.02869, 0.05262, 0.60855, 0.67370, 0.78656]},
+       {"id": "doc5", "article_vector": [0.23235, 0.70062, 0.95036, 0.36251, 0.41233, 0.53170, 0.25459, 0.81606]}
+     ]'
+----
+
+Query the index
+
+[source,sh]
+----
+curl -s "http://localhost:8983/solr/vectors/select?q=*:*&omitHeader=true"
+----
