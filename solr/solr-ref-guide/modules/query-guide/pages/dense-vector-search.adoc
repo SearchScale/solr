@@ -576,12 +576,12 @@ Create the configset
 
 [source,sh]
 ----
-mkdir -p /tmp/cuvs_configset/conf
+mkdir -p cuvs_configset/conf
 ----
 
 [source,sh]
 ----
-cat > /tmp/cuvs_configset/conf/solrconfig.xml << 'EOF'
+cat > cuvs_configset/conf/solrconfig.xml << 'EOF'
 <?xml version="1.0" ?>
 <config>
     <luceneMatchVersion>10.0.0</luceneMatchVersion>
@@ -622,7 +622,7 @@ EOF
 
 [source,sh]
 ----
-cat > /tmp/cuvs_configset/conf/managed-schema << 'EOF'
+cat > cuvs_configset/conf/managed-schema << 'EOF'
 <?xml version="1.0" ?>
 <schema name="schema-densevector" version="1.7">
     <fieldType name="string" class="solr.StrField" multiValued="true"/>
@@ -652,7 +652,7 @@ Upload the configset and create a collection
 
 [source,sh]
 ----
-./bin/solr zk upconfig -n cuvs_vectors -d /tmp/cuvs_configset/conf && ./bin/solr create -c vectors -n cuvs_vectors
+./bin/solr zk upconfig -n cuvs_vectors -d cuvs_configset/conf && ./bin/solr create -c vectors -n cuvs_vectors
 ----
 
 Index documents
@@ -674,5 +674,23 @@ Query the index
 
 [source,sh]
 ----
-curl -s "http://localhost:8983/solr/vectors/select?q=*:*&omitHeader=true"
+curl -s 'http://localhost:8983/solr/vectors/select?q=%7B!knn%20f=article_vector%20topK=1%7D%5B0.84393,0.50073,0.57059,0.89899,-0.08722,0.26803,0.00807,0.09877%5D&fl=id,score&rows=3&omitHeader=true'
+----
+
+Should produce the following
+
+[source,json]
+----
+{
+  "response":{
+    "numFound":1,
+    "start":0,
+    "maxScore":0.8377289,
+    "numFoundExact":true,
+    "docs":[{
+      "id":"doc2",
+      "score":0.8377289
+    }]
+  }
+}
 ----
