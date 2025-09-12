@@ -529,7 +529,7 @@ To try this out, first copy the module jar files (found in the regular Solr tarb
 cp modules/cuvs/lib/*.jar server/solr-webapp/webapp/WEB-INF/lib/
 ----
 
-Define the fieldType in the schema, with knnAlgorithm set to `cagra_hnsw`:
+Define the `fieldType` in the schema, with knnAlgorithm set to `cagra_hnsw`:
 
 [source,xml]
 ----
@@ -562,27 +562,27 @@ Where:
 
 Following is a complete example of setting up a collection with cuVS.
 
-1. Install CUDA 13.0 and cuVS native library
-
+. Install CUDA 13.0 and cuVS native library
++
 [source,sh]
 ----
 // nocommit TBD
 ----
 
-2. Copy the `cuvs` module jar files (before starting Solr).
-
+. Copy the `cuvs` module jar files (before starting Solr).
++
 [source,sh]
 ----
 cp modules/cuvs/lib/*.jar server/solr-webapp/webapp/WEB-INF/lib/
 ----
 
-3. Create a configset
-
+. Create a configset
++
 [source,sh]
 ----
 mkdir -p cuvs_configset/conf
 ----
-
++
 [source,sh]
 ----
 cat > cuvs_configset/conf/solrconfig.xml << 'EOF'
@@ -623,7 +623,7 @@ cat > cuvs_configset/conf/solrconfig.xml << 'EOF'
 </config>
 EOF
 ----
-
++
 [source,sh]
 ----
 cat > cuvs_configset/conf/managed-schema << 'EOF'
@@ -645,22 +645,22 @@ cat > cuvs_configset/conf/managed-schema << 'EOF'
 EOF
 ----
 
-4. Start Solr
-
+. Start Solr
++
 [source,sh]
 ----
 ./bin/solr start
 ----
 
-5. Upload the configset and create a collection
-
+. Upload the configset and create a collection
++
 [source,sh]
 ----
 ./bin/solr zk upconfig -n cuvs_vectors -d cuvs_configset/conf && ./bin/solr create -c vectors -n cuvs_vectors
 ----
 
-6. Index documents
-
+. Index documents
++
 [source,sh]
 ----
 curl -s -X POST "http://localhost:8983/solr/vectors/update?commit=true" \
@@ -674,15 +674,15 @@ curl -s -X POST "http://localhost:8983/solr/vectors/update?commit=true" \
      ]'
 ----
 
-7. Query the index
-
+. Query the index
++
 [source,sh]
 ----
 curl -s 'http://localhost:8983/solr/vectors/select?q=%7B!knn%20f=article_vector%20topK=1%7D%5B0.84393,0.50073,0.57059,0.89899,-0.08722,0.26803,0.00807,0.09877%5D&fl=id,score&rows=3&omitHeader=true'
 ----
-
++
 Should return the following
-
++
 [source,json]
 ----
 {
