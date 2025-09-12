@@ -519,32 +519,29 @@ Details about using the ReRank Query Parser can be found in the xref:query-guide
 [NOTE]
 This is feature is currently experimental.
 
-This acceleration is achieved with the help of the `cuvs` module in Solr. 
-The `cuvs` module consists of a `CuVSCodec` that uses the `Lucene99AcceleratedHNSWVectorsFormat` from https://github.com/rapidsai/cuvs-lucene[cuVS-Lucene], a pluggable library for Apache Lucene.
-cuVS-Lucene uses the https://arxiv.org/abs/2308.15136[CAGRA algorithm] for GPU based acceleration via the https://github.com/rapidsai/cuvs/tree/branch-25.10/[cuVS-Java API] from
-the https://docs.rapids.ai/api/cuvs/stable/#[Nvidia's cuVS library] which is the GPU based vector search library.
-https://developer.nvidia.com/cuda-downloads[CUDA 13.0+] and https://jdk.java.net/archive/[JDK 22] are required to use this feature.
+Building HNSW graphs, esp. with high dimensions and cardinality, is usually slow. If you have a NVIDIA GPU, then building HNSW based indexes can be sped up manifold. This is powered by the https://github.com/rapidsai/cuvs-lucene[cuVS-Lucene] library, a pluggable vectors format for Apache Lucene. It uses the state of the art https://arxiv.org/abs/2308.15136[CAGRA algorithm] for quickly building a fixed degree connected graph, which is then serialized into a HNSW graph. https://developer.nvidia.com/cuda-downloads[CUDA 13.0+] and https://jdk.java.net/archive/[JDK 22] are required to use this feature.
 
-Copy the module jar files
+
+To try this out, first copy the module jar files (found in the regular Solr tarball, not the slim one) before starting Solr.
 
 [source,sh]
 ----
 cp modules/cuvs/lib/*.jar server/solr-webapp/webapp/WEB-INF/lib/
 ----
 
-Define the fieldType in the schema 
+Define the fieldType in the schema, with knnAlgorithm set to `cagra_hnsw`:
 
 [source,xml]
 ----
 <fieldType name="knn_vector" class="solr.DenseVectorField" vectorDimension="8" knnAlgorithm="cagra_hnsw" similarityFunction="cosine" />
 ----
 
-Declare the xref:configuration-guide:codec-factory.adoc[codecFactory] in xref:configuration-guide:configuring-solrconfig-xml.adoc[solrconfig.xml]
+Define the xref:configuration-guide:codec-factory.adoc[codecFactory] in xref:configuration-guide:configuring-solrconfig-xml.adoc[solrconfig.xml]
 
 [source,xml]
 ----
 <codecFactory name="CuvsCodecFactory" class="org.apache.solr.cuvs.CuvsCodecFactory">
-    <str name="cuvsWriterThreads">32</str>
+    <str name="cuvsWriterThreads">8</str>
     <str name="intGraphDegree">128</str>
     <str name="graphDegree">64</str>
     <str name="hnswLayers">1</str>
@@ -563,16 +560,23 @@ Where:
 
 === Example
 
-Following is a step-by-step example.
+Following is a complete example of setting up a collection with cuVS.
 
-Copy the `cuvs` module jar files (before starting Solr).
+1. Install CUDA 13.0 and cuVS native library
+
+[source,sh]
+----
+// nocommit TBD
+----
+
+2. Copy the `cuvs` module jar files (before starting Solr).
 
 [source,sh]
 ----
 cp modules/cuvs/lib/*.jar server/solr-webapp/webapp/WEB-INF/lib/
 ----
 
-Create the configset
+3. Create a configset
 
 [source,sh]
 ----
@@ -641,21 +645,21 @@ cat > cuvs_configset/conf/managed-schema << 'EOF'
 EOF
 ----
 
-Start Solr
+4. Start Solr
 
 [source,sh]
 ----
 ./bin/solr start
 ----
 
-Upload the configset and create a collection
+5. Upload the configset and create a collection
 
 [source,sh]
 ----
 ./bin/solr zk upconfig -n cuvs_vectors -d cuvs_configset/conf && ./bin/solr create -c vectors -n cuvs_vectors
 ----
 
-Index documents
+6. Index documents
 
 [source,sh]
 ----
@@ -670,14 +674,14 @@ curl -s -X POST "http://localhost:8983/solr/vectors/update?commit=true" \
      ]'
 ----
 
-Query the index
+7. Query the index
 
 [source,sh]
 ----
 curl -s 'http://localhost:8983/solr/vectors/select?q=%7B!knn%20f=article_vector%20topK=1%7D%5B0.84393,0.50073,0.57059,0.89899,-0.08722,0.26803,0.00807,0.09877%5D&fl=id,score&rows=3&omitHeader=true'
 ----
 
-Should produce the following
+Should return the following
 
 [source,json]
 ----
