@@ -49,6 +49,7 @@ public class CuvsCodecFactory extends CodecFactory implements SolrCoreAware {
   public void inform(SolrCore solrCore) {
     fallback.inform(solrCore);
     this.core = solrCore;
+    GpuMetricsService.getInstance().initialize(solrCore);
   }
 
   @Override
