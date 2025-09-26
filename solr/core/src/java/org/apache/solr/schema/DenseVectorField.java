@@ -37,8 +37,6 @@ import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.queries.function.valuesource.ByteKnnVectorFieldSource;
 import org.apache.lucene.queries.function.valuesource.FloatKnnVectorFieldSource;
-import org.apache.lucene.search.KnnByteVectorQuery;
-import org.apache.lucene.search.KnnFloatVectorQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.util.BytesRef;
@@ -370,25 +368,6 @@ public class DenseVectorField extends FloatPointField {
 
     throw new SolrException(
         SolrException.ErrorCode.BAD_REQUEST, "Vector encoding not supported for function queries.");
-  }
-
-  public Query getKnnVectorQuery(
-      String fieldName, String vectorToSearch, int topK, Query filterQuery) {
-
-    DenseVectorParser vectorBuilder =
-        getVectorBuilder(vectorToSearch, DenseVectorParser.BuilderPhase.QUERY);
-
-    switch (vectorEncoding) {
-      case FLOAT32:
-        return new KnnFloatVectorQuery(
-            fieldName, vectorBuilder.getFloatVector(), topK, filterQuery);
-      case BYTE:
-        return new KnnByteVectorQuery(fieldName, vectorBuilder.getByteVector(), topK, filterQuery);
-      default:
-        throw new SolrException(
-            SolrException.ErrorCode.SERVER_ERROR,
-            "Unexpected state. Vector Encoding: " + vectorEncoding);
-    }
   }
 
   public Query getKnnVectorQuery(
