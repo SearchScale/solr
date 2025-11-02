@@ -122,8 +122,22 @@ public class DenseVectorField extends FloatPointField {
     this.vectorEncoding = vectorEncoding;
   }
 
+  private String getTypeNameOrUnknown(IndexSchema schema) {
+    return schema != null ? schema.getSchemaName() : "unknown";
+  }
+
   @Override
   public void init(IndexSchema schema, Map<String, String> args) {
+
+    if (args.containsKey("hnswMaxConnections")) {
+      log.warn("Deprecated parameter 'hnswMaxConnections' detected in fieldType '{}'. Use 'hnswM' instead.",
+          getTypeNameOrUnknown(schema));
+    }
+    if (args.containsKey("hnswBeamWidth")) {
+      log.warn("Deprecated parameter 'hnswBeamWidth' detected in fieldType '{}'. Use 'hnswEfConstruction' instead.",
+          getTypeNameOrUnknown(schema));
+    }
+
     this.dimension =
         ofNullable(args.get(KNN_VECTOR_DIMENSION))
             .map(Integer::parseInt)
