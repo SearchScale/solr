@@ -122,7 +122,7 @@ public class DenseVectorField extends FloatPointField {
     this.vectorEncoding = vectorEncoding;
   }
 
-  private String getTypeNameOrUnknown(IndexSchema schema) {
+  private String getFieldTypeName(IndexSchema schema) {
     return schema != null ? schema.getSchemaName() : "unknown";
   }
 
@@ -131,11 +131,11 @@ public class DenseVectorField extends FloatPointField {
 
     if (args.containsKey("hnswMaxConnections")) {
       log.warn("Deprecated parameter 'hnswMaxConnections' detected in fieldType '{}'. Use 'hnswM' instead.",
-          getTypeNameOrUnknown(schema));
+          getFieldTypeName(schema));
     }
     if (args.containsKey("hnswBeamWidth")) {
       log.warn("Deprecated parameter 'hnswBeamWidth' detected in fieldType '{}'. Use 'hnswEfConstruction' instead.",
-          getTypeNameOrUnknown(schema));
+          getFieldTypeName(schema));
     }
 
     this.dimension =
