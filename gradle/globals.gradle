@@ -24,6 +24,7 @@ allprojects {
 
   // Repositories to fetch dependencies from.
   repositories {
+    mavenLocal()
     mavenCentral()
     /* Reenable this if we need it again in future
     maven {

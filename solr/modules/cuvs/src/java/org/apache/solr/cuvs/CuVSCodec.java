@@ -16,6 +16,8 @@
  */
 package org.apache.solr.cuvs;
 
+import com.nvidia.cuvs.lucene.Lucene99AcceleratedHNSWBinaryQuantizedVectorsFormat;
+import com.nvidia.cuvs.lucene.Lucene99AcceleratedHNSWQuantizedVectorsFormat;
 import com.nvidia.cuvs.lucene.Lucene99AcceleratedHNSWVectorsFormat;
 import java.lang.invoke.MethodHandles;
 import org.apache.lucene.codecs.FilterCodec;
@@ -25,8 +27,10 @@ import org.apache.lucene.codecs.perfield.PerFieldKnnVectorsFormat;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.SolrCore;
+import org.apache.solr.schema.BinaryQuantizedDenseVectorField;
 import org.apache.solr.schema.DenseVectorField;
 import org.apache.solr.schema.FieldType;
+import org.apache.solr.schema.ScalarQuantizedDenseVectorField;
 import org.apache.solr.schema.SchemaField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +57,9 @@ public class CuVSCodec extends FilterCodec {
   private final SolrCore core;
   private final Lucene103Codec fallbackCodec;
   private final Lucene99AcceleratedHNSWVectorsFormat cuvsHNSWVectorsFormat;
+  private final Lucene99AcceleratedHNSWBinaryQuantizedVectorsFormat
+      cuvsBinaryQuantizedVectorsFormat;
+  private final Lucene99AcceleratedHNSWQuantizedVectorsFormat cuvsQuantizedVectorsFormat;
 
   public CuVSCodec(SolrCore core, Lucene103Codec fallback, NamedList<?> args) {
     super(FALLBACK_CODEC, fallback);
@@ -82,6 +89,12 @@ public class CuVSCodec extends FilterCodec {
     cuvsHNSWVectorsFormat =
         new Lucene99AcceleratedHNSWVectorsFormat(
             cuvsWriterThreads, intGraphDegree, graphDegree, hnswLayers, maxConn, beamWidth);
+    cuvsBinaryQuantizedVectorsFormat =
+        new Lucene99AcceleratedHNSWBinaryQuantizedVectorsFormat(
+            cuvsWriterThreads, intGraphDegree, graphDegree, hnswLayers, maxConn, beamWidth);
+    cuvsQuantizedVectorsFormat =
+        new Lucene99AcceleratedHNSWQuantizedVectorsFormat(
+            cuvsWriterThreads, intGraphDegree, graphDegree, hnswLayers, maxConn, beamWidth);
 
     if (log.isInfoEnabled()) {
       log.info(
@@ -104,21 +117,31 @@ public class CuVSCodec extends FilterCodec {
       new PerFieldKnnVectorsFormat() {
         @Override
         public KnnVectorsFormat getKnnVectorsFormatForField(String field) {
-          final SchemaField schemaField = core.getLatestSchema().getFieldOrNull(field);
-          FieldType fieldType = (schemaField == null ? null : schemaField.getType());
-          if (fieldType instanceof DenseVectorField vectorType) {
-            String knnAlgorithm = vectorType.getKnnAlgorithm();
-            if (CAGRA_HNSW.equals(knnAlgorithm)) {
-              return cuvsHNSWVectorsFormat;
-            } else if (DenseVectorField.HNSW_ALGORITHM.equals(knnAlgorithm)) {
-              return fallbackCodec.getKnnVectorsFormatForField(field);
-            } else {
-              throw new SolrException(
-                  SolrException.ErrorCode.SERVER_ERROR,
-                  knnAlgorithm + " KNN algorithm is not supported");
-            }
+          SchemaField schemaField = core.getLatestSchema().getFieldOrNull(field);
+          if (schemaField == null) {
+            return fallbackCodec.getKnnVectorsFormatForField(field);
           }
-          return fallbackCodec.getKnnVectorsFormatForField(field);
+          FieldType fieldType = schemaField.getType();
+          if (!(fieldType instanceof DenseVectorField)) {
+            return fallbackCodec.getKnnVectorsFormatForField(field);
+          }
+          DenseVectorField vectorField = (DenseVectorField) fieldType;
+          String knnAlgorithm = vectorField.getKnnAlgorithm();
+          if (!CAGRA_HNSW.equals(knnAlgorithm)) {
+            if (DenseVectorField.HNSW_ALGORITHM.equals(knnAlgorithm)) {
+              return fallbackCodec.getKnnVectorsFormatForField(field);
+            }
+            throw new SolrException(
+                SolrException.ErrorCode.SERVER_ERROR,
+                knnAlgorithm + " KNN algorithm is not supported");
+          }
+          if (fieldType instanceof BinaryQuantizedDenseVectorField) {
+            return cuvsBinaryQuantizedVectorsFormat;
+          }
+          if (fieldType instanceof ScalarQuantizedDenseVectorField) {
+            return cuvsQuantizedVectorsFormat;
+          }
+          return cuvsHNSWVectorsFormat;
         }
       };
 }
