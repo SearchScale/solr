@@ -88,12 +88,57 @@ public class DenseVectorField extends FloatPointField {
   static final String CUVS_HNSW_LAYERS = "cuvsHnswLayers";
   static final String CUVS_HNSW_MAX_CONNECTIONS = "cuvsHnswM";
   static final String CUVS_HNSW_EF_CONSTRUCTION = "cuvsHnswEfConstruction";
+  static final String CUVS_CAGRA_GRAPH_BUILD_ALGO = "cuvsCagraGraphBuildAlgo";
+  static final String CUVS_IVF_PQ_PARAMS_REFINEMENT_RATE = "cuVSIvfPqParamsRefinementRate";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_ADD_DATA_ON_BUILD =
+      "cuVSIvfPqIndexParamsAddDataOnBuild";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND =
+      "cuVSIvfPqIndexParamsCodebookKind";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_CONSERVATIVE_MEMORY_ALLOCATION =
+      "cuVSIvfPqIndexParamsConservativeMemoryAllocation";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_FORCE_RANDOM_ROTATION =
+      "cuVSIvfPqIndexParamsForceRandomRotation";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_N_ITERS =
+      "cuVSIvfPqIndexParamsKmeansNIters";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_TRAINSET_FRACTION =
+      "cuVSIvfPqIndexParamsKmeansTrainsetFraction";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_MAX_TRAIN_POINTS_PER_PQ_CODE =
+      "cuVSIvfPqIndexParamsMaxTrainPointsPerPqCode";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_METRIC = "cuVSIvfPqIndexParamsMetric";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_METRIC_ARG = "cuVSIvfPqIndexParamsMetricArg";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_N_LISTS = "cuVSIvfPqIndexParamsNLists";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_PQ_BITS = "cuVSIvfPqIndexParamsPqBits";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_PQ_DIM = "cuVSIvfPqIndexParamsPqDim";
+  static final String CUVS_IVF_PQ_SEARCH_PARAMS_INTERNAL_DISTANCE_DTYPE =
+      "cuVSIvfPqSearchParamsInternalDistanceDtype";
+  static final String CUVS_IVF_PQ_SEARCH_PARAMS_LUT_DTYPE = "cuVSIvfPqSearchParamsLutDtype";
+  static final String CUVS_IVF_PQ_SEARCH_PARAMS_N_PROBES = "cuVSIvfPqSearchParamsNProbes";
+  static final String CUVS_IVF_PQ_SEARCH_PARAMS_PREFERRED_SHMEM_CARVEOUT =
+      "cuVSIvfPqSearchParamsPreferredShmemCarveout";
   static final int DEFAULT_CUVS_WRITER_THREADS = 32;
   static final int DEFAULT_CUVS_INT_GRAPH_DEGREE = 128;
   static final int DEFAULT_CUVS_GRAPH_DEGREE = 64;
   static final int DEFAULT_CUVS_HNSW_LAYERS = 1;
   static final int DEFAULT_CUVS_HNSW_MAX_CONNECTIONS = 16;
   static final int DEFAULT_CUVS_HNSW_EF_CONSTRUCTION = 100;
+  static final String DEFAULT_CUVS_CAGRA_GRAPH_BUILD_ALGO = "NN_DESCENT";
+  static final float DEFAULT_CUVS_IVF_PQ_PARAMS_REFINEMENT_RATE = 1.0f;
+  static final boolean DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_ADD_DATA_ON_BUILD = true;
+  static final String DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND = "PER_SUBSPACE";
+  static final boolean DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_CONSERVATIVE_MEMORY_ALLOCATION = false;
+  static final boolean DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_FORCE_RANDOM_ROTATION = false;
+  static final int DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_N_ITERS = 20;
+  static final double DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_TRAINSET_FRACTION = 0.5;
+  static final int DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_MAX_TRAIN_POINTS_PER_PQ_CODE = 256;
+  static final String DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_METRIC = "L2Expanded";
+  static final float DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_METRIC_ARG = 0.0f;
+  static final int DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_N_LISTS = 1024;
+  static final int DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_PQ_BITS = 8;
+  static final int DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_PQ_DIM = 0;
+  static final String DEFAULT_CUVS_IVF_PQ_SEARCH_PARAMS_INTERNAL_DISTANCE_DTYPE = "CUDA_R_16F";
+  static final String DEFAULT_CUVS_IVF_PQ_SEARCH_PARAMS_LUT_DTYPE = "CUDA_R_16F";
+  static final int DEFAULT_CUVS_IVF_PQ_SEARCH_PARAMS_N_PROBES = 50;
+  static final double DEFAULT_CUVS_IVF_PQ_SEARCH_PARAMS_PREFERRED_SHMEM_CARVEOUT = 1.0;
 
   private int dimension;
   private VectorSimilarityFunction similarityFunction;
@@ -123,6 +168,24 @@ public class DenseVectorField extends FloatPointField {
   private int cuvsHnswLayers;
   private int cuvsHnswM;
   private int cuvsHnswEfConstruction;
+  private String cuvsCagraGraphBuildAlgo;
+  private float cuVSIvfPqParamsRefinementRate;
+  private boolean cuVSIvfPqIndexParamsAddDataOnBuild;
+  private String cuVSIvfPqIndexParamsCodebookKind;
+  private boolean cuVSIvfPqIndexParamsConservativeMemoryAllocation;
+  private boolean cuVSIvfPqIndexParamsForceRandomRotation;
+  private int cuVSIvfPqIndexParamsKmeansNIters;
+  private double cuVSIvfPqIndexParamsKmeansTrainsetFraction;
+  private int cuVSIvfPqIndexParamsMaxTrainPointsPerPqCode;
+  private String cuVSIvfPqIndexParamsMetric;
+  private float cuVSIvfPqIndexParamsMetricArg;
+  private int cuVSIvfPqIndexParamsNLists;
+  private int cuVSIvfPqIndexParamsPqBits;
+  private int cuVSIvfPqIndexParamsPqDim;
+  private String cuVSIvfPqSearchParamsInternalDistanceDtype;
+  private String cuVSIvfPqSearchParamsLutDtype;
+  private int cuVSIvfPqSearchParamsNProbes;
+  private double cuVSIvfPqSearchParamsPreferredShmemCarveout;
 
   public DenseVectorField() {
     super();
@@ -245,6 +308,111 @@ public class DenseVectorField extends FloatPointField {
             .orElse(DEFAULT_CUVS_HNSW_EF_CONSTRUCTION);
     args.remove(CUVS_HNSW_EF_CONSTRUCTION);
 
+    this.cuvsCagraGraphBuildAlgo =
+        args.getOrDefault(CUVS_CAGRA_GRAPH_BUILD_ALGO, DEFAULT_CUVS_CAGRA_GRAPH_BUILD_ALGO)
+            .toUpperCase(Locale.ROOT);
+    args.remove(CUVS_CAGRA_GRAPH_BUILD_ALGO);
+
+    this.cuVSIvfPqParamsRefinementRate =
+        ofNullable(args.get(CUVS_IVF_PQ_PARAMS_REFINEMENT_RATE))
+            .map(Float::parseFloat)
+            .orElse(DEFAULT_CUVS_IVF_PQ_PARAMS_REFINEMENT_RATE);
+    args.remove(CUVS_IVF_PQ_PARAMS_REFINEMENT_RATE);
+
+    this.cuVSIvfPqIndexParamsAddDataOnBuild =
+        ofNullable(args.get(CUVS_IVF_PQ_INDEX_PARAMS_ADD_DATA_ON_BUILD))
+            .map(Boolean::parseBoolean)
+            .orElse(DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_ADD_DATA_ON_BUILD);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_ADD_DATA_ON_BUILD);
+
+    this.cuVSIvfPqIndexParamsCodebookKind =
+        args.getOrDefault(
+            CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND,
+            DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND);
+
+    this.cuVSIvfPqIndexParamsConservativeMemoryAllocation =
+        ofNullable(args.get(CUVS_IVF_PQ_INDEX_PARAMS_CONSERVATIVE_MEMORY_ALLOCATION))
+            .map(Boolean::parseBoolean)
+            .orElse(DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_CONSERVATIVE_MEMORY_ALLOCATION);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_CONSERVATIVE_MEMORY_ALLOCATION);
+
+    this.cuVSIvfPqIndexParamsForceRandomRotation =
+        ofNullable(args.get(CUVS_IVF_PQ_INDEX_PARAMS_FORCE_RANDOM_ROTATION))
+            .map(Boolean::parseBoolean)
+            .orElse(DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_FORCE_RANDOM_ROTATION);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_FORCE_RANDOM_ROTATION);
+
+    this.cuVSIvfPqIndexParamsKmeansNIters =
+        ofNullable(args.get(CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_N_ITERS))
+            .map(Integer::parseInt)
+            .orElse(DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_N_ITERS);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_N_ITERS);
+
+    this.cuVSIvfPqIndexParamsKmeansTrainsetFraction =
+        ofNullable(args.get(CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_TRAINSET_FRACTION))
+            .map(Double::parseDouble)
+            .orElse(DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_TRAINSET_FRACTION);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_TRAINSET_FRACTION);
+
+    this.cuVSIvfPqIndexParamsMaxTrainPointsPerPqCode =
+        ofNullable(args.get(CUVS_IVF_PQ_INDEX_PARAMS_MAX_TRAIN_POINTS_PER_PQ_CODE))
+            .map(Integer::parseInt)
+            .orElse(DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_MAX_TRAIN_POINTS_PER_PQ_CODE);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_MAX_TRAIN_POINTS_PER_PQ_CODE);
+
+    this.cuVSIvfPqIndexParamsMetric =
+        args.getOrDefault(
+            CUVS_IVF_PQ_INDEX_PARAMS_METRIC, DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_METRIC);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_METRIC);
+
+    this.cuVSIvfPqIndexParamsMetricArg =
+        ofNullable(args.get(CUVS_IVF_PQ_INDEX_PARAMS_METRIC_ARG))
+            .map(Float::parseFloat)
+            .orElse(DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_METRIC_ARG);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_METRIC_ARG);
+
+    this.cuVSIvfPqIndexParamsNLists =
+        ofNullable(args.get(CUVS_IVF_PQ_INDEX_PARAMS_N_LISTS))
+            .map(Integer::parseInt)
+            .orElse(DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_N_LISTS);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_N_LISTS);
+
+    this.cuVSIvfPqIndexParamsPqBits =
+        ofNullable(args.get(CUVS_IVF_PQ_INDEX_PARAMS_PQ_BITS))
+            .map(Integer::parseInt)
+            .orElse(DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_PQ_BITS);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_PQ_BITS);
+
+    this.cuVSIvfPqIndexParamsPqDim =
+        ofNullable(args.get(CUVS_IVF_PQ_INDEX_PARAMS_PQ_DIM))
+            .map(Integer::parseInt)
+            .orElse(DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_PQ_DIM);
+    args.remove(CUVS_IVF_PQ_INDEX_PARAMS_PQ_DIM);
+
+    this.cuVSIvfPqSearchParamsInternalDistanceDtype =
+        args.getOrDefault(
+            CUVS_IVF_PQ_SEARCH_PARAMS_INTERNAL_DISTANCE_DTYPE,
+            DEFAULT_CUVS_IVF_PQ_SEARCH_PARAMS_INTERNAL_DISTANCE_DTYPE);
+    args.remove(CUVS_IVF_PQ_SEARCH_PARAMS_INTERNAL_DISTANCE_DTYPE);
+
+    this.cuVSIvfPqSearchParamsLutDtype =
+        args.getOrDefault(
+            CUVS_IVF_PQ_SEARCH_PARAMS_LUT_DTYPE, DEFAULT_CUVS_IVF_PQ_SEARCH_PARAMS_LUT_DTYPE);
+    args.remove(CUVS_IVF_PQ_SEARCH_PARAMS_LUT_DTYPE);
+
+    this.cuVSIvfPqSearchParamsNProbes =
+        ofNullable(args.get(CUVS_IVF_PQ_SEARCH_PARAMS_N_PROBES))
+            .map(Integer::parseInt)
+            .orElse(DEFAULT_CUVS_IVF_PQ_SEARCH_PARAMS_N_PROBES);
+    args.remove(CUVS_IVF_PQ_SEARCH_PARAMS_N_PROBES);
+
+    this.cuVSIvfPqSearchParamsPreferredShmemCarveout =
+        ofNullable(args.get(CUVS_IVF_PQ_SEARCH_PARAMS_PREFERRED_SHMEM_CARVEOUT))
+            .map(Double::parseDouble)
+            .orElse(DEFAULT_CUVS_IVF_PQ_SEARCH_PARAMS_PREFERRED_SHMEM_CARVEOUT);
+    args.remove(CUVS_IVF_PQ_SEARCH_PARAMS_PREFERRED_SHMEM_CARVEOUT);
+
     this.properties &= ~MULTIVALUED;
     this.properties &= ~UNINVERTIBLE;
 
@@ -307,6 +475,78 @@ public class DenseVectorField extends FloatPointField {
 
   public int getCuvsHnswEfConstruction() {
     return cuvsHnswEfConstruction;
+  }
+
+  public String getCuvsCagraGraphBuildAlgo() {
+    return cuvsCagraGraphBuildAlgo;
+  }
+
+  public float getCuVSIvfPqParamsRefinementRate() {
+    return cuVSIvfPqParamsRefinementRate;
+  }
+
+  public boolean getCuVSIvfPqIndexParamsAddDataOnBuild() {
+    return cuVSIvfPqIndexParamsAddDataOnBuild;
+  }
+
+  public String getCuVSIvfPqIndexParamsCodebookKind() {
+    return cuVSIvfPqIndexParamsCodebookKind;
+  }
+
+  public boolean getCuVSIvfPqIndexParamsConservativeMemoryAllocation() {
+    return cuVSIvfPqIndexParamsConservativeMemoryAllocation;
+  }
+
+  public boolean getCuVSIvfPqIndexParamsForceRandomRotation() {
+    return cuVSIvfPqIndexParamsForceRandomRotation;
+  }
+
+  public int getCuVSIvfPqIndexParamsKmeansNIters() {
+    return cuVSIvfPqIndexParamsKmeansNIters;
+  }
+
+  public double getCuVSIvfPqIndexParamsKmeansTrainsetFraction() {
+    return cuVSIvfPqIndexParamsKmeansTrainsetFraction;
+  }
+
+  public int getCuVSIvfPqIndexParamsMaxTrainPointsPerPqCode() {
+    return cuVSIvfPqIndexParamsMaxTrainPointsPerPqCode;
+  }
+
+  public String getCuVSIvfPqIndexParamsMetric() {
+    return cuVSIvfPqIndexParamsMetric;
+  }
+
+  public float getCuVSIvfPqIndexParamsMetricArg() {
+    return cuVSIvfPqIndexParamsMetricArg;
+  }
+
+  public int getCuVSIvfPqIndexParamsNLists() {
+    return cuVSIvfPqIndexParamsNLists;
+  }
+
+  public int getCuVSIvfPqIndexParamsPqBits() {
+    return cuVSIvfPqIndexParamsPqBits;
+  }
+
+  public int getCuVSIvfPqIndexParamsPqDim() {
+    return cuVSIvfPqIndexParamsPqDim;
+  }
+
+  public String getCuVSIvfPqSearchParamsInternalDistanceDtype() {
+    return cuVSIvfPqSearchParamsInternalDistanceDtype;
+  }
+
+  public String getCuVSIvfPqSearchParamsLutDtype() {
+    return cuVSIvfPqSearchParamsLutDtype;
+  }
+
+  public int getCuVSIvfPqSearchParamsNProbes() {
+    return cuVSIvfPqSearchParamsNProbes;
+  }
+
+  public double getCuVSIvfPqSearchParamsPreferredShmemCarveout() {
+    return cuVSIvfPqSearchParamsPreferredShmemCarveout;
   }
 
   @Override

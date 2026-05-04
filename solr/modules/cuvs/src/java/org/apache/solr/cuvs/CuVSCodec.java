@@ -16,8 +16,20 @@
  */
 package org.apache.solr.cuvs;
 
+import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
+import com.nvidia.cuvs.CagraIndexParams.CodebookGen;
+import com.nvidia.cuvs.CagraIndexParams.CudaDataType;
+import com.nvidia.cuvs.CagraIndexParams.CuvsDistanceType;
+import com.nvidia.cuvs.CuVSIvfPqIndexParams;
+import com.nvidia.cuvs.CuVSIvfPqParams;
+import com.nvidia.cuvs.CuVSIvfPqSearchParams;
+import com.nvidia.cuvs.lucene.AcceleratedHNSWParams;
 import com.nvidia.cuvs.lucene.Lucene99AcceleratedHNSWVectorsFormat;
+import java.io.IOException;
 import java.lang.invoke.MethodHandles;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.lucene104.Lucene104Codec;
@@ -41,6 +53,7 @@ public class CuVSCodec extends FilterCodec {
 
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
   private static final String FALLBACK_CODEC = "Lucene104";
+  private static volatile boolean cudaRuntimeLoaded = false;
   private final SolrCore core;
   private final Lucene104Codec fallbackCodec;
 
@@ -81,23 +94,86 @@ public class CuVSCodec extends FilterCodec {
               assert cuvsHnswEfConstruction > 0
                   : "cuvsHnswEfConstruction cannot be less then or equal to 0";
 
+              CagraGraphBuildAlgo buildAlgo =
+                  CagraGraphBuildAlgo.valueOf(vectorType.getCuvsCagraGraphBuildAlgo());
+              loadCudaRuntime();
+
+              AcceleratedHNSWParams.Builder paramsBuilder =
+                  new AcceleratedHNSWParams.Builder()
+                      .withWriterThreads(cuvsWriterThreads)
+                      .withIntermediateGraphDegree(cuvsIntGraphDegree)
+                      .withGraphDegree(cuvsGraphDegree)
+                      .withHNSWLayer(cuvsHnswLayers)
+                      .withMaxConn(cuvsHnswM)
+                      .withBeamWidth(cuvsHnswEfConstruction)
+                      .withCagraGraphBuildAlgo(buildAlgo);
+              if (buildAlgo == CagraGraphBuildAlgo.IVF_PQ) {
+                CuVSIvfPqIndexParams ivfPqIndexParams =
+                    new CuVSIvfPqIndexParams.Builder()
+                        .withAddDataOnBuild(vectorType.getCuVSIvfPqIndexParamsAddDataOnBuild())
+                        .withCodebookKind(
+                            CodebookGen.valueOf(vectorType.getCuVSIvfPqIndexParamsCodebookKind()))
+                        .withConservativeMemoryAllocation(
+                            vectorType.getCuVSIvfPqIndexParamsConservativeMemoryAllocation())
+                        .withForceRandomRotation(
+                            vectorType.getCuVSIvfPqIndexParamsForceRandomRotation())
+                        .withKmeansNIters(vectorType.getCuVSIvfPqIndexParamsKmeansNIters())
+                        .withKmeansTrainsetFraction(
+                            vectorType.getCuVSIvfPqIndexParamsKmeansTrainsetFraction())
+                        .withMaxTrainPointsPerPqCode(
+                            vectorType.getCuVSIvfPqIndexParamsMaxTrainPointsPerPqCode())
+                        .withMetric(
+                            CuvsDistanceType.valueOf(vectorType.getCuVSIvfPqIndexParamsMetric()))
+                        .withMetricArg(vectorType.getCuVSIvfPqIndexParamsMetricArg())
+                        .withNLists(vectorType.getCuVSIvfPqIndexParamsNLists())
+                        .withPqBits(vectorType.getCuVSIvfPqIndexParamsPqBits())
+                        .withPqDim(vectorType.getCuVSIvfPqIndexParamsPqDim())
+                        .build();
+                CuVSIvfPqSearchParams ivfPqSearchParams =
+                    new CuVSIvfPqSearchParams.Builder()
+                        .withInternalDistanceDtype(
+                            CudaDataType.valueOf(
+                                vectorType.getCuVSIvfPqSearchParamsInternalDistanceDtype()))
+                        .withLutDtype(
+                            CudaDataType.valueOf(vectorType.getCuVSIvfPqSearchParamsLutDtype()))
+                        .withNProbes(vectorType.getCuVSIvfPqSearchParamsNProbes())
+                        .withPreferredShmemCarveout(
+                            vectorType.getCuVSIvfPqSearchParamsPreferredShmemCarveout())
+                        .build();
+                paramsBuilder.withCuVSIvfPqParams(
+                    new CuVSIvfPqParams.Builder()
+                        .withCuVSIvfPqIndexParams(ivfPqIndexParams)
+                        .withCuVSIvfPqSearchParams(ivfPqSearchParams)
+                        .withRefinementRate(vectorType.getCuVSIvfPqParamsRefinementRate())
+                        .build());
+                if (log.isInfoEnabled()) {
+                  log.info(
+                      "Initializing IVF-PQ parameter values: metric {}, pqBits {}, pqDim {}, nLists {}, kmeansNIters {}, kmeansTrainsetFraction {}, nProbes {}, lutDtype {}, internalDistanceDtype {}, refinementRate {}",
+                      vectorType.getCuVSIvfPqIndexParamsMetric(),
+                      vectorType.getCuVSIvfPqIndexParamsPqBits(),
+                      vectorType.getCuVSIvfPqIndexParamsPqDim(),
+                      vectorType.getCuVSIvfPqIndexParamsNLists(),
+                      vectorType.getCuVSIvfPqIndexParamsKmeansNIters(),
+                      vectorType.getCuVSIvfPqIndexParamsKmeansTrainsetFraction(),
+                      vectorType.getCuVSIvfPqSearchParamsNProbes(),
+                      vectorType.getCuVSIvfPqSearchParamsLutDtype(),
+                      vectorType.getCuVSIvfPqSearchParamsInternalDistanceDtype(),
+                      vectorType.getCuVSIvfPqParamsRefinementRate());
+                }
+              }
+
               if (log.isInfoEnabled()) {
                 log.info(
-                    "Initializing Lucene99AcceleratedHNSWVectorsFormat with parameter values: cuvsWriterThreads {}, cuvsIntGraphDegree {}, cuvsGraphDegree {}, cuvsHnswLayers {}, cuvsHnswM {}, cuvsHnswEfConstruction {}",
+                    "Initializing Lucene99AcceleratedHNSWVectorsFormat with parameter values: cuvsWriterThreads {}, cuvsIntGraphDegree {}, cuvsGraphDegree {}, cuvsHnswLayers {}, cuvsHnswM {}, cuvsHnswEfConstruction {}, cagraGraphBuildAlgo {}",
                     cuvsWriterThreads,
                     cuvsIntGraphDegree,
                     cuvsGraphDegree,
                     cuvsHnswLayers,
                     cuvsHnswM,
-                    cuvsHnswEfConstruction);
+                    cuvsHnswEfConstruction,
+                    buildAlgo);
               }
-              return new Lucene99AcceleratedHNSWVectorsFormat(
-                  cuvsWriterThreads,
-                  cuvsIntGraphDegree,
-                  cuvsGraphDegree,
-                  cuvsHnswLayers,
-                  cuvsHnswM,
-                  cuvsHnswEfConstruction);
+              return new Lucene99AcceleratedHNSWVectorsFormat(paramsBuilder.build());
             } else if (DenseVectorField.HNSW_ALGORITHM.equals(knnAlgorithm)) {
               return fallbackCodec.getKnnVectorsFormatForField(field);
             } else {
@@ -109,4 +185,35 @@ public class CuVSCodec extends FilterCodec {
           return fallbackCodec.getKnnVectorsFormatForField(field);
         }
       };
+
+  private static synchronized void loadCudaRuntime() {
+    if (cudaRuntimeLoaded) {
+      return;
+    }
+
+    String javaLibraryPath = System.getProperty("java.library.path", "");
+    for (String libraryPath : javaLibraryPath.split(java.io.File.pathSeparator)) {
+      if (libraryPath.isBlank()) {
+        continue;
+      }
+      Path directory = Path.of(libraryPath);
+      if (!Files.isDirectory(directory)) {
+        continue;
+      }
+      try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory, "libcudart.so*")) {
+        for (Path candidate : stream) {
+          System.load(candidate.toAbsolutePath().toString());
+          cudaRuntimeLoaded = true;
+          log.info("Loaded CUDA runtime library before cuVS initialization: {}", candidate);
+          return;
+        }
+      } catch (IOException | UnsatisfiedLinkError e) {
+        log.debug("Could not load CUDA runtime from directory {}", directory, e);
+      }
+    }
+
+    log.warn(
+        "Could not find libcudart.so on java.library.path; cuVS initialization may fail if CUDA symbols are unresolved");
+    cudaRuntimeLoaded = true;
+  }
 }
