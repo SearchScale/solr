@@ -37,6 +37,7 @@ import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.queries.function.valuesource.ByteKnnVectorFieldSource;
 import org.apache.lucene.queries.function.valuesource.FloatKnnVectorFieldSource;
+import org.apache.lucene.search.FieldExistsQuery;
 import org.apache.lucene.search.PatienceKnnVectorQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.SeededKnnVectorQuery;
@@ -45,6 +46,7 @@ import org.apache.lucene.search.knn.KnnSearchStrategy;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.hnsw.HnswGraph;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.core.Solr101FlatVectorFormat;
 import org.apache.solr.search.QParser;
 import org.apache.solr.search.vector.KnnQParser.EarlyTerminationParams;
 import org.apache.solr.search.vector.SolrKnnByteVectorQuery;
@@ -69,6 +71,7 @@ import org.slf4j.LoggerFactory;
 public class DenseVectorField extends FloatPointField {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
   public static final String HNSW_ALGORITHM = "hnsw";
+  public static final String FLAT_ALGORITHM = "flat";
   public static final String CAGRA_HNSW_ALGORITHM = "cagra_hnsw";
   public static final String DEFAULT_KNN_ALGORITHM = HNSW_ALGORITHM;
   static final String KNN_VECTOR_DIMENSION = "vectorDimension";
@@ -431,16 +434,6 @@ public class DenseVectorField extends FloatPointField {
     return knnAlgorithm;
   }
 
-  @Deprecated
-  public Integer getHnswMaxConn() {
-    return hnswM;
-  }
-
-  @Deprecated
-  public Integer getHnswBeamWidth() {
-    return hnswEfConstruction;
-  }
-
   public Integer getHnswM() {
     return hnswM;
   }
@@ -711,7 +704,11 @@ public class DenseVectorField extends FloatPointField {
   }
 
   public KnnVectorsFormat buildKnnVectorsFormat() {
-    return new Lucene99HnswVectorsFormat(hnswM, hnswEfConstruction);
+    if (FLAT_ALGORITHM.equals(knnAlgorithm)) {
+      return new Solr101FlatVectorFormat();
+    } else {
+      return new Lucene99HnswVectorsFormat(hnswM, hnswEfConstruction);
+    }
   }
 
   @Override
@@ -742,6 +739,13 @@ public class DenseVectorField extends FloatPointField {
       Query seedQuery,
       EarlyTerminationParams earlyTermination,
       Integer filteredSearchThreshold) {
+
+    if (FLAT_ALGORITHM.equals(knnAlgorithm)) {
+      throw new SolrException(
+          SolrException.ErrorCode.BAD_REQUEST,
+          "KNN vector queries are not supported for fields using knnAlgorithm=\"flat\". "
+              + "Use vectorSimilarity() function queries instead.");
+    }
 
     DenseVectorParser vectorBuilder =
         getVectorBuilder(vectorToSearch, DenseVectorParser.BuilderPhase.QUERY);
@@ -799,6 +803,11 @@ public class DenseVectorField extends FloatPointField {
     return baseQuery;
   }
 
+  @Override
+  public Query getExistenceQuery(QParser parser, SchemaField field) {
+    return new FieldExistsQuery(field.getName());
+  }
+
   /**
    * Not Supported. Please use the {!knn} query parser to run K nearest neighbors search queries.
    */
@@ -809,7 +818,10 @@ public class DenseVectorField extends FloatPointField {
         "Field Queries are not supported for Dense Vector fields. Please use the {!knn} query parser to run K nearest neighbors search queries.");
   }
 
-  /** Not Supported */
+  /**
+   * Unbounded ranges ({@code [* TO *]}) are treated as existence queries. Bounded range queries are
+   * not supported.
+   */
   @Override
   public Query getRangeQuery(
       QParser parser,
@@ -818,6 +830,9 @@ public class DenseVectorField extends FloatPointField {
       String part2,
       boolean minInclusive,
       boolean maxInclusive) {
+    if (part1 == null && part2 == null) {
+      return getExistenceQuery(parser, field);
+    }
     throw new SolrException(
         SolrException.ErrorCode.BAD_REQUEST,
         "Range Queries are not supported for Dense Vector fields. Please use the {!knn} query parser to run K nearest neighbors search queries.");
@@ -832,12 +847,13 @@ public class DenseVectorField extends FloatPointField {
 
   private Query getSeededQuery(Query knnQuery, Query seed) {
     return switch (knnQuery) {
-      case SolrKnnFloatVectorQuery knnFloatQuery -> SeededKnnVectorQuery.fromFloatQuery(
-          knnFloatQuery, seed);
-      case SolrKnnByteVectorQuery knnByteQuery -> SeededKnnVectorQuery.fromByteQuery(
-          knnByteQuery, seed);
-      default -> throw new SolrException(
-          SolrException.ErrorCode.SERVER_ERROR, "Invalid type of knn query");
+      case SolrKnnFloatVectorQuery knnFloatQuery ->
+          SeededKnnVectorQuery.fromFloatQuery(knnFloatQuery, seed);
+      case SolrKnnByteVectorQuery knnByteQuery ->
+          SeededKnnVectorQuery.fromByteQuery(knnByteQuery, seed);
+      default ->
+          throw new SolrException(
+              SolrException.ErrorCode.SERVER_ERROR, "Invalid type of knn query");
     };
   }
 
@@ -846,24 +862,30 @@ public class DenseVectorField extends FloatPointField {
         (earlyTermination.getSaturationThreshold() != null
             && earlyTermination.getPatience() != null);
     return switch (knnQuery) {
-      case SolrKnnFloatVectorQuery knnFloatQuery -> useExplicitParams
-          ? PatienceKnnVectorQuery.fromFloatQuery(
-              knnFloatQuery,
-              earlyTermination.getSaturationThreshold(),
-              earlyTermination.getPatience())
-          : PatienceKnnVectorQuery.fromFloatQuery(knnFloatQuery);
-      case SolrKnnByteVectorQuery knnByteQuery -> useExplicitParams
-          ? PatienceKnnVectorQuery.fromByteQuery(
-              knnByteQuery,
-              earlyTermination.getSaturationThreshold(),
-              earlyTermination.getPatience())
-          : PatienceKnnVectorQuery.fromByteQuery(knnByteQuery);
-      case SeededKnnVectorQuery seedQuery -> useExplicitParams
-          ? PatienceKnnVectorQuery.fromSeededQuery(
-              seedQuery, earlyTermination.getSaturationThreshold(), earlyTermination.getPatience())
-          : PatienceKnnVectorQuery.fromSeededQuery(seedQuery);
-      default -> throw new SolrException(
-          SolrException.ErrorCode.SERVER_ERROR, "Invalid type of knn query");
+      case SolrKnnFloatVectorQuery knnFloatQuery ->
+          useExplicitParams
+              ? PatienceKnnVectorQuery.fromFloatQuery(
+                  knnFloatQuery,
+                  earlyTermination.getSaturationThreshold(),
+                  earlyTermination.getPatience())
+              : PatienceKnnVectorQuery.fromFloatQuery(knnFloatQuery);
+      case SolrKnnByteVectorQuery knnByteQuery ->
+          useExplicitParams
+              ? PatienceKnnVectorQuery.fromByteQuery(
+                  knnByteQuery,
+                  earlyTermination.getSaturationThreshold(),
+                  earlyTermination.getPatience())
+              : PatienceKnnVectorQuery.fromByteQuery(knnByteQuery);
+      case SeededKnnVectorQuery seedQuery ->
+          useExplicitParams
+              ? PatienceKnnVectorQuery.fromSeededQuery(
+                  seedQuery,
+                  earlyTermination.getSaturationThreshold(),
+                  earlyTermination.getPatience())
+              : PatienceKnnVectorQuery.fromSeededQuery(seedQuery);
+      default ->
+          throw new SolrException(
+              SolrException.ErrorCode.SERVER_ERROR, "Invalid type of knn query");
     };
   }
 }
