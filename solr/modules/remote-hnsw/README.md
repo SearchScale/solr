@@ -24,74 +24,68 @@ is ordinary Lucene on the Solr node.
 
 Not a replacement for the in-process `cuvs` module. Experimental.
 
-The service URL is not hardcoded. Set `SOLR_HNSW_BUILD_SERVICE_URL` to the
-host already running `HnswBuildServer`.
+GPU service
+-----------
 
-Try it
-------
+The service is already running on the 4090. Reach it over Tailscale as
+`4090-workstation` (MagicDNS). Solr stays on your machine.
 
-The GPU service should already be up. From this Solr checkout:
-
-    export SOLR_HNSW_BUILD_SERVICE_URL=http://<gpu-host>:18765
+    export SOLR_HNSW_BUILD_SERVICE_URL=http://4090-workstation:18765
     curl -sS "$SOLR_HNSW_BUILD_SERVICE_URL/v1/health"
 
-You want `"gpu":true`. Then:
+You want `"gpu":true`. Quick check that indexing works (200 random 8-d
+vectors, skipped unless the env var is set):
 
     ./gradlew :solr:modules:remote-hnsw:test --tests ManualRemoteServiceSmokeTest
 
-That indexes 200 vectors through the live service and checks knn. Skipped
-unless the env var is set.
+Index some vectors
+------------------
 
-Same host, text → vector → graph (`hash-demo`, no ONNX):
+Full Solr install, not slim. From this checkout:
 
-    ./gradlew :solr:modules:remote-hnsw:test --tests ManualRemoteEmbeddingSmokeTest
-
-Unit tests (mock HTTP, no GPU):
-
-    ./gradlew :solr:modules:remote-hnsw:test
-
-Solr node
----------
-
-Full Solr install, not slim:
+    ./gradlew -p solr/packaging devFull
 
     export SOLR_MODULES=remote-hnsw
-    export SOLR_HNSW_BUILD_SERVICE_URL=http://<gpu-host>:18765
-    bin/solr start
+    export SOLR_HNSW_BUILD_SERVICE_URL=http://4090-workstation:18765
+    solr/packaging/build/dev/bin/solr start
 
-Start from `src/test-files/solr/collection1/conf` (`vectorDimension` is 8;
-change it to match your data). `serviceUrl` is empty on purpose so it reads
-the env var.
+    solr/packaging/build/dev/bin/solr create -c vectors \
+      -d "$PWD/solr/modules/remote-hnsw/example"
 
-    <codecFactory class="org.apache.solr.hnsw.remote.RemoteHnswCodecFactory">
-      <str name="serviceUrl">${solr.hnsw.build.service.url:}</str>
-      <int name="timeoutSeconds">${solr.hnsw.build.timeout.seconds:600}</int>
-      <str name="builder">${solr.hnsw.build.builder:auto}</str>
-    </codecFactory>
+`example/conf` is an 8-d `remote_hnsw` configset. `serviceUrl` is empty so
+it reads the env var. Then:
 
-    <fieldType name="knn_vector" class="solr.DenseVectorField" vectorDimension="8"
-               knnAlgorithm="remote_hnsw" similarityFunction="euclidean"/>
+    curl -X POST -H 'Content-type:application/json' \
+      'http://localhost:8983/solr/vectors/update?commit=true' \
+      --data-binary @"$PWD/solr/modules/remote-hnsw/example/sample-docs.json"
 
-Index docs with a `vector` field. Search with `{!knn f=vector topK=10}[...]`.
+    curl -s 'http://localhost:8983/solr/vectors/select' \
+      --data-urlencode 'q={!knn f=vector topK=3}[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8]' \
+      --data-urlencode 'fl=id,score'
+
+Change `vectorDimension` in `example/conf/schema.xml` if your vectors are
+not 8-d (commit after the first add is what hits the GPU).
 
 * `SOLR_HNSW_BUILD_SERVICE_URL` — required for indexing
 * `SOLR_HNSW_BUILD_TIMEOUT_SECONDS` — default 600; raise for large segments
 * `SOLR_HNSW_BUILD_BUILDER` — `auto` (default), `gpu`, or `cpu`
 * `SOLR_HNSW_BUILD_SERVICE_TOKEN` — sent as `Authorization: Bearer` if set
 
-`builder` is sent as `X-RHNSW-Builder`. `fallbackToCpu=true` on the codec is
-different: Lucene CPU HNSW on the Solr node if the HTTP call fails. Default
-is to fail the flush.
+`builder` is sent as `X-RHNSW-Builder`. `fallbackToCpu=true` on the codec
+runs Lucene CPU HNSW on the Solr node if the HTTP call fails. Default is
+to fail the flush.
 
 Large batches spend most of their time on the HTTP transfer, not CAGRA.
-1M × 768 is about 3 GiB on the wire.
+
+Unit tests (mock HTTP, no GPU): `./gradlew :solr:modules:remote-hnsw:test`
 
 Embedding (optional)
 --------------------
 
 Same process, different endpoint. Text field → `/v1/embed` → vector field,
 then the codec above runs as usual. If `solr.embed.service.url` is unset,
-the HNSW service URL is reused.
+the HNSW service URL is reused. Start from
+`src/test-files/solr/embed-collection/conf`.
 
     <processor class="org.apache.solr.hnsw.remote.update.RemoteEmbeddingUpdateProcessorFactory">
       <str name="serviceUrl">${solr.embed.service.url:}</str>
@@ -108,13 +102,8 @@ the HNSW service URL is reused.
 
 Query: `q={!remote_embed f=vector topK=5}quick brown fox`
 
-Docs missing `sourceField` pass through with no vector. A failed embed call
-rejects the whole batch.
-
 `hash-demo` is always registered (no weights). Real models are ONNX dirs on
-the service host (`--models-dir`, each subdir with `model.onnx` +
-`tokenizer.json`). `GET /v1/health` lists ids. Schema `vectorDimension` must
-match the model.
+the service host (`--models-dir`). `GET /v1/health` lists ids.
 
 Protocol
 --------
@@ -122,27 +111,24 @@ Protocol
 * `GET /v1/health`
 * `POST /v1/hnsw/build` — little-endian FLOAT32 body (`count * dim * 4`);
   metadata in `X-RHNSW-*` headers; response is an `RHNW` neighbor list, not
-  a Lucene index. `X-RHNSW-Builder-Used` says which path ran.
-* `POST /v1/embed` — length-prefixed UTF-8 texts; `X-Embed-Model` /
-  `X-Embed-Count`; response is FLOAT32 plus `X-Embed-Dimension`.
+  a Lucene index.
+* `POST /v1/embed` — length-prefixed UTF-8 texts; response is FLOAT32 plus
+  `X-Embed-Dimension`.
 
 Restarting the service
 ----------------------
 
-JDK 22+, CUDA 13+, `libcuvs` on the library path. From this tree:
+Only if it is down. JDK 22+, CUDA 13+, `libcuvs` on the library path. From
+this tree:
 
     ./gradlew :solr:modules:remote-hnsw:serviceDist
 
 Copy `solr/modules/remote-hnsw/build/distributions/remote-hnsw-service/` to
-the GPU host, then:
+the GPU host, then bind to the Tailscale address Solr uses:
 
     java --enable-native-access=ALL-UNNAMED -Xms8g -Xmx16g \
       -Djava.io.tmpdir=/path/to/scratch \
       -Djava.library.path=/path/to/cuvs/lib:/usr/local/cuda/lib64 \
       -cp "solr-remote-hnsw-service.jar:lib/*" \
       org.apache.solr.hnsw.remote.service.HnswBuildServer \
-      --port 18765 --bind <address-solr-can-reach>
-
-`--builder auto|gpu|cpu`. Bind to the interface Solr uses; do not publish an
-unauthenticated listener on a public NIC. Skip `--models-dir` unless you
-need ONNX (weights compete with CAGRA for GPU memory).
+      --port 18765 --bind 4090-workstation
