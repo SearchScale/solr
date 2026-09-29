@@ -1,0 +1,121 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+apply plugin: 'java-library'
+
+description = 'Remote GPU HNSW build service'
+
+configurations {
+  gpuService
+}
+
+sourceSets {
+  service {
+    java {
+      srcDir 'src/service/java'
+    }
+    compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath + configurations.gpuService
+    runtimeClasspath += output + compileClasspath
+  }
+}
+
+dependencies {
+  implementation project(':solr:core')
+  implementation libs.apache.lucene.core
+  implementation libs.slf4j.api
+
+  gpuService(libs.cuvs.lucene) {
+    changing = true
+  }
+  gpuService libs.cuvs.java
+  gpuService libs.apache.lucene.core
+  gpuService libs.slf4j.api
+  // ONNX/DJL are service-host only, not on the Solr plugin classpath.
+  gpuService libs.onnxruntime
+  gpuService libs.djl.api
+  gpuService libs.djl.huggingface.tokenizers
+
+  testImplementation project(':solr:test-framework')
+  testImplementation libs.apache.lucene.testframework
+  testImplementation libs.apache.lucene.core
+  testImplementation libs.junit.junit
+  testImplementation libs.hamcrest.hamcrest
+  testImplementation libs.commonsio.commonsio
+}
+
+tasks.named('compileServiceJava') {
+  dependsOn tasks.named('classes')
+  onlyIf { JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22) }
+}
+
+// GPU service compiles against cuvs-lucene (Java 22). Keep it off `check` so Solr's
+// JDK 21 verification does not load those class files; build with :serviceDist.
+tasks.matching { it.name == 'serviceEcjLint' || it.name == 'forbiddenApisService' }.configureEach {
+  enabled = false
+}
+
+tasks.register('serviceJar', Jar) {
+  archiveClassifier = 'service'
+  from sourceSets.service.output
+  from(sourceSets.main.output) {
+    include 'org/apache/solr/hnsw/remote/HnswBuildParams.class'
+    include 'org/apache/solr/hnsw/remote/HnswBuildProtocol.class'
+    include 'org/apache/solr/hnsw/remote/HnswBuilder.class'
+    include 'org/apache/solr/hnsw/remote/HnswNeighborGraph.class'
+    include 'org/apache/solr/hnsw/remote/HnswNeighborGraph$*.class'
+    include 'org/apache/solr/hnsw/remote/HnswGraphCodec.class'
+    include 'org/apache/solr/hnsw/remote/LuceneCpuHnswBuilder.class'
+    include 'org/apache/solr/hnsw/remote/EmbedProtocol.class'
+    include 'org/apache/solr/hnsw/remote/EmbedItemCodec.class'
+    include 'org/apache/solr/hnsw/remote/EmbedderRegistry.class'
+    include 'org/apache/solr/hnsw/remote/EmbedderRegistry$*.class'
+    include 'org/apache/solr/hnsw/remote/TextEmbedder.class'
+    include 'org/apache/solr/hnsw/remote/HashTextEmbedder.class'
+  }
+  manifest {
+    attributes('Main-Class': 'org.apache.solr.hnsw.remote.service.HnswBuildServer')
+  }
+}
+
+tasks.register('serviceDist', Sync) {
+  dependsOn tasks.named('serviceJar')
+  into layout.buildDirectory.dir('distributions/remote-hnsw-service')
+  from(tasks.named('serviceJar')) {
+    rename { 'solr-remote-hnsw-service.jar' }
+  }
+  from(configurations.gpuService) {
+    into 'lib'
+  }
+  from 'README.md'
+}
+
+// Benchmark helpers; not part of check. See RawVectorLoader / RecallEval.
+tasks.register('loadRawVectors', JavaExec) {
+  group = 'benchmark'
+  description = 'Load a raw float32 vector file into a running Solr core (see --args)'
+  dependsOn tasks.named('testClasses')
+  classpath = sourceSets.test.runtimeClasspath
+  mainClass = 'org.apache.solr.hnsw.remote.tools.RawVectorLoader'
+}
+
+tasks.register('evalRecall', JavaExec) {
+  group = 'benchmark'
+  description = 'Evaluate recall@K of a running Solr core against a ground-truth file (see --args)'
+  dependsOn tasks.named('testClasses')
+  classpath = sourceSets.test.runtimeClasspath
+  mainClass = 'org.apache.solr.hnsw.remote.tools.RecallEval'
+}

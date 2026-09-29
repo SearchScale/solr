@@ -73,6 +73,7 @@ public class DenseVectorField extends FloatPointField {
   public static final String HNSW_ALGORITHM = "hnsw";
   public static final String FLAT_ALGORITHM = "flat";
   public static final String CAGRA_HNSW_ALGORITHM = "cagra_hnsw";
+  public static final String REMOTE_HNSW_ALGORITHM = "remote_hnsw";
   public static final String DEFAULT_KNN_ALGORITHM = HNSW_ALGORITHM;
   static final String KNN_VECTOR_DIMENSION = "vectorDimension";
   static final String KNN_ALGORITHM = "knnAlgorithm";
@@ -95,14 +96,12 @@ public class DenseVectorField extends FloatPointField {
   static final String CUVS_IVF_PQ_PARAMS_REFINEMENT_RATE = "cuVSIvfPqParamsRefinementRate";
   static final String CUVS_IVF_PQ_INDEX_PARAMS_ADD_DATA_ON_BUILD =
       "cuVSIvfPqIndexParamsAddDataOnBuild";
-  static final String CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND =
-      "cuVSIvfPqIndexParamsCodebookKind";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND = "cuVSIvfPqIndexParamsCodebookKind";
   static final String CUVS_IVF_PQ_INDEX_PARAMS_CONSERVATIVE_MEMORY_ALLOCATION =
       "cuVSIvfPqIndexParamsConservativeMemoryAllocation";
   static final String CUVS_IVF_PQ_INDEX_PARAMS_FORCE_RANDOM_ROTATION =
       "cuVSIvfPqIndexParamsForceRandomRotation";
-  static final String CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_N_ITERS =
-      "cuVSIvfPqIndexParamsKmeansNIters";
+  static final String CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_N_ITERS = "cuVSIvfPqIndexParamsKmeansNIters";
   static final String CUVS_IVF_PQ_INDEX_PARAMS_KMEANS_TRAINSET_FRACTION =
       "cuVSIvfPqIndexParamsKmeansTrainsetFraction";
   static final String CUVS_IVF_PQ_INDEX_PARAMS_MAX_TRAIN_POINTS_PER_PQ_CODE =
@@ -330,8 +329,7 @@ public class DenseVectorField extends FloatPointField {
 
     this.cuVSIvfPqIndexParamsCodebookKind =
         args.getOrDefault(
-            CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND,
-            DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND);
+            CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND, DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND);
     args.remove(CUVS_IVF_PQ_INDEX_PARAMS_CODEBOOK_KIND);
 
     this.cuVSIvfPqIndexParamsConservativeMemoryAllocation =
@@ -365,8 +363,7 @@ public class DenseVectorField extends FloatPointField {
     args.remove(CUVS_IVF_PQ_INDEX_PARAMS_MAX_TRAIN_POINTS_PER_PQ_CODE);
 
     this.cuVSIvfPqIndexParamsMetric =
-        args.getOrDefault(
-            CUVS_IVF_PQ_INDEX_PARAMS_METRIC, DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_METRIC);
+        args.getOrDefault(CUVS_IVF_PQ_INDEX_PARAMS_METRIC, DEFAULT_CUVS_IVF_PQ_INDEX_PARAMS_METRIC);
     args.remove(CUVS_IVF_PQ_INDEX_PARAMS_METRIC);
 
     this.cuVSIvfPqIndexParamsMetricArg =

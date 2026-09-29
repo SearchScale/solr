@@ -1018,6 +1018,8 @@ Building HNSW graphs, esp. with high dimensions and cardinality, is usually slow
 
 You can know more about Nvidia's cuVS library here: https://developer.nvidia.com/cuvs
 
+=== In-process (cuVS module)
+
 To try this out, first copy the module jar files (found in the regular Solr tarball, not the slim one) before starting Solr.
 
 [source,sh]
@@ -1278,6 +1280,13 @@ Should return the following
   }
 }
 ----
+
+=== Remote GPU build service
+
+To build graphs on a separate GPU host instead of in the Solr process, enable the
+`remote-hnsw` module and set `knnAlgorithm="remote_hnsw"`. Optional text embedding
+uses the same service. See `solr/modules/remote-hnsw/README.md`.
+This path is experimental.
 
 == Additional Resources
 

@@ -100,6 +100,7 @@ public class CuVSCodec extends FilterCodec {
 
               AcceleratedHNSWParams.Builder paramsBuilder =
                   new AcceleratedHNSWParams.Builder()
+                      .withStrategy(AcceleratedHNSWParams.Strategy.CUSTOM)
                       .withWriterThreads(cuvsWriterThreads)
                       .withIntermediateGraphDegree(cuvsIntGraphDegree)
                       .withGraphDegree(cuvsGraphDegree)
@@ -192,7 +193,8 @@ public class CuVSCodec extends FilterCodec {
     }
 
     String javaLibraryPath = System.getProperty("java.library.path", "");
-    for (String libraryPath : javaLibraryPath.split(java.io.File.pathSeparator)) {
+    String pathSeparator = System.getProperty("path.separator");
+    for (String libraryPath : javaLibraryPath.split(pathSeparator)) {
       if (libraryPath.isBlank()) {
         continue;
       }

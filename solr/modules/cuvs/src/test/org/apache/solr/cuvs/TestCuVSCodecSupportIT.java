@@ -16,7 +16,8 @@
  */
 package org.apache.solr.cuvs;
 
-import com.nvidia.cuvs.lucene.Lucene99AcceleratedHNSWVectorsFormat;
+import static com.nvidia.cuvs.lucene.ThreadLocalCuVSResourcesProvider.isSupported;
+
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.nio.file.Files;
@@ -68,7 +69,7 @@ public class TestCuVSCodecSupportIT extends SolrTestCaseJ4 {
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    assumeTrue("Skipping cuvs tests", Lucene99AcceleratedHNSWVectorsFormat.supported());
+    assumeTrue("Skipping cuvs tests", isSupported());
     Path tmpSolrHome = createTempDir();
     Path tmpConfDir = FilterPath.unwrap(tmpSolrHome.resolve(CONF_DIR));
     Path testHomeConfDir = TEST_HOME().resolve(CONF_DIR);
