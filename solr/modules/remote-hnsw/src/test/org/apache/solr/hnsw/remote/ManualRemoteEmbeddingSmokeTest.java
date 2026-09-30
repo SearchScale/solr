@@ -40,7 +40,8 @@ import org.junit.Test;
  *
  * <pre>{@code
  * SOLR_HNSW_BUILD_SERVICE_URL=http://host:18765 ./gradlew \
- *   :solr:modules:remote-hnsw:test --tests ManualRemoteEmbeddingSmokeTest
+ *   :solr:modules:remote-hnsw:test --tests ManualRemoteEmbeddingSmokeTest \
+ *   -Ptests.useSecurityManager=false
  * }</pre>
  */
 public class ManualRemoteEmbeddingSmokeTest extends SolrTestCase {

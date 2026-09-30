@@ -36,7 +36,8 @@ The service is already running on the 4090. Reach it over Tailscale as
 You want `"gpu":true`. Quick check that indexing works (200 random 8-d
 vectors, skipped unless the env var is set):
 
-    ./gradlew :solr:modules:remote-hnsw:test --tests ManualRemoteServiceSmokeTest
+    ./gradlew :solr:modules:remote-hnsw:test --tests ManualRemoteServiceSmokeTest \
+      -Ptests.useSecurityManager=false
 
 Index some vectors
 ------------------
@@ -115,20 +116,15 @@ Protocol
 * `POST /v1/embed` — length-prefixed UTF-8 texts; response is FLOAT32 plus
   `X-Embed-Dimension`.
 
-Restarting the service
-----------------------
+Start the service (4090)
+------------------------
 
-Only if it is down. JDK 22+, CUDA 13+, `libcuvs` on the library path. From
-this tree:
+On the 4090, from `/data2/hnsw-service`:
 
-    ./gradlew :solr:modules:remote-hnsw:serviceDist
-
-Copy `solr/modules/remote-hnsw/build/distributions/remote-hnsw-service/` to
-the GPU host, then bind to the Tailscale address Solr uses:
-
-    java --enable-native-access=ALL-UNNAMED -Xms8g -Xmx16g \
-      -Djava.io.tmpdir=/path/to/scratch \
-      -Djava.library.path=/path/to/cuvs/lib:/usr/local/cuda/lib64 \
+    conda activate cuvs-solr
+    export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}:/usr/local/cuda/lib64"
+    java --enable-native-access=ALL-UNNAMED \
+      -Djava.library.path="$CONDA_PREFIX/lib:/usr/local/cuda/lib64" \
       -cp "solr-remote-hnsw-service.jar:lib/*" \
       org.apache.solr.hnsw.remote.service.HnswBuildServer \
-      --port 18765 --bind 4090-workstation
+      --port 18765 --bind 100.101.239.76
