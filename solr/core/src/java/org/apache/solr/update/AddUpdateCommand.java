@@ -200,9 +200,10 @@ public class AddUpdateCommand extends UpdateCommand {
    * Computes the final flattened Lucene docs, possibly generating them on-demand (on iteration).
    * The SolrInputDocument itself may be modified, which will be reflected in the update log. This
    * should only be called once. Any changes made to the returned Document(s) will not be reflected
-   * in the SolrInputDocument, or future calls to this method.
+   * in the SolrInputDocument, or future calls to this method. Subclasses may supply documents they
+   * built themselves.
    */
-  Iterable<Document> makeLuceneDocs() {
+  protected Iterable<Document> makeLuceneDocs() {
     // perhaps this should move to UpdateHandler or DocumentBuilder?
     assert !isInPlaceUpdate() : "We don't expect this to happen."; // but should "work"?
     if (!req.getSchema().isUsableForChildDocs()) {
