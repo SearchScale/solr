@@ -1,0 +1,6 @@
+# See https://github.com/apache/solr/blob/main/dev-docs/changelog.adoc
+title: "Without an update log and outside SolrCloud, DirectUpdateHandler2 adds documents whose ID cannot be in the index yet without the delete of an earlier version, which saves the CPU Lucene spends applying those deletes. Set solr.update.skipDeleteForNewIds=false to turn it off."
+type: changed
+authors:
+  - name: Ishan Chattopadhyaya
+    url: https://home.apache.org/phonebook.html?uid=ishan
