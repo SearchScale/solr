@@ -48,6 +48,7 @@ import org.apache.solr.cloud.ZkController;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.cloud.Replica;
 import org.apache.solr.common.params.ModifiableSolrParams;
+import org.apache.solr.common.util.EnvUtils;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.SolrConfig.UpdateHandlerInfo;
 import org.apache.solr.core.SolrCore;
@@ -124,6 +125,17 @@ public class DirectUpdateHandler2 extends UpdateHandler
   protected boolean commitWithinSoftCommit;
 
   /**
+   * Whether adds of ids that cannot be in the index yet skip the delete of a previous version (see
+   * {@link NewIdTracker}): on by default ({@code solr.update.skipDeleteForNewIds}), and only
+   * without an update log, outside SolrCloud and with a uniqueKey.
+   */
+  private final boolean trackNewIds;
+
+  /** Most ids a writer's tracker holds (16 bytes of heap each) before it turns itself off. */
+  private static final long MAX_TRACKED_IDS =
+      EnvUtils.getPropertyAsLong("solr.update.skipDeleteForNewIds.maxIds", 1L << 25);
+
+  /**
    * package access for testing
    *
    * @lucene.internal
@@ -164,6 +176,11 @@ public class DirectUpdateHandler2 extends UpdateHandler
             true);
 
     commitWithinSoftCommit = updateHandlerInfo.commitWithinSoftCommit;
+    trackNewIds =
+        idField != null
+            && ulog == null
+            && !core.getCoreContainer().isZooKeeperAware()
+            && EnvUtils.getPropertyAsBool("solr.update.skipDeleteForNewIds", true);
 
     ZkController zkController = core.getCoreContainer().getZkController();
     if (zkController != null
@@ -208,6 +225,11 @@ public class DirectUpdateHandler2 extends UpdateHandler
             true);
 
     commitWithinSoftCommit = updateHandlerInfo.commitWithinSoftCommit;
+    trackNewIds =
+        idField != null
+            && ulog == null
+            && !core.getCoreContainer().isZooKeeperAware()
+            && EnvUtils.getPropertyAsBool("solr.update.skipDeleteForNewIds", true);
 
     if (ulog != null) {
       // If we are reusing the existing update log, inform the log that its update handler has
@@ -393,6 +415,7 @@ public class DirectUpdateHandler2 extends UpdateHandler
     log.info("REMOVING ALL DOCUMENTS FROM INDEX");
     RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
     try {
+      newIds(iw.get());
       iw.get().deleteAll();
     } finally {
       iw.decref();
@@ -511,6 +534,9 @@ public class DirectUpdateHandler2 extends UpdateHandler
     RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
     try {
       IndexWriter writer = iw.get();
+      NewIdTracker ids = newIds(writer);
+      BytesRef id = cmd.getIndexedId();
+      if (ids != null && id != null) ids.decide(id, false); // a document with this id exists now
       writer.addDocuments(cmd.makeLuceneDocs());
       if (ulog != null) ulog.add(cmd);
 
@@ -524,7 +550,22 @@ public class DirectUpdateHandler2 extends UpdateHandler
     try {
       IndexWriter writer = iw.get();
 
-      updateDocOrDocValues(cmd, writer);
+      NewIdTracker ids = newIds(writer);
+      BytesRef id = cmd.getIndexedId();
+      // An update term (dedupe) or an in-place update relies on its delete.
+      long append =
+          ids == null || id == null
+              ? NewIdTracker.NO_APPEND
+              : ids.decide(id, cmd.updateTerm == null && !cmd.isInPlaceUpdate());
+      if (append != NewIdTracker.NO_APPEND) {
+        try {
+          writer.addDocuments(cmd.makeLuceneDocs()); // no previous version to delete
+        } finally {
+          ids.landed(append);
+        }
+      } else {
+        updateDocOrDocValues(cmd, writer);
+      }
 
       // Add to the transaction log *after* successfully adding to the
       // index, if there was no error.
@@ -615,6 +656,7 @@ public class DirectUpdateHandler2 extends UpdateHandler
     // SolrCore.verbose("deleteDocuments",deleteTerm,writer);
     RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
     try {
+      newIds(iw.get());
       iw.get().deleteDocuments(deleteTerm);
     } finally {
       iw.decref();
@@ -724,6 +766,7 @@ public class DirectUpdateHandler2 extends UpdateHandler
         } else {
           RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
           try {
+            newIds(iw.get());
             iw.get().deleteDocuments(new DeleteByQueryWrapper(q, core.getLatestSchema()));
           } finally {
             iw.decref();
@@ -762,6 +805,8 @@ public class DirectUpdateHandler2 extends UpdateHandler
       }
       RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
       try {
+        // the merged documents' ids are not tracked: from now on every add overwrites
+        if (trackNewIds) NewIdTracker.disable(iw.get());
         iw.get().addIndexes(mergeReaders.toArray(new CodecReader[0]));
       } finally {
         iw.decref();
@@ -1190,6 +1235,28 @@ public class DirectUpdateHandler2 extends UpdateHandler
       }
     }
   }
+
+  /**
+   * The writer's tracker of the ids it holds, or null when not tracking. Called before every change
+   * to the writer, so the tracker is read from the index before the writer has any.
+   */
+  private NewIdTracker newIds(IndexWriter writer) throws IOException {
+    if (!trackNewIds) return null;
+    WriterIds last = lastWriterIds;
+    if (last != null && last.writer() == writer) return last.ids();
+    String[] fields =
+        core.getLatestSchema().getFieldOrNull(IndexSchema.ROOT_FIELD_NAME) != null
+            ? new String[] {idField.getName(), IndexSchema.ROOT_FIELD_NAME}
+            : new String[] {idField.getName()};
+    NewIdTracker ids = NewIdTracker.forWriter(writer, fields, MAX_TRACKED_IDS);
+    lastWriterIds = new WriterIds(writer, ids);
+    return ids;
+  }
+
+  private record WriterIds(IndexWriter writer, NewIdTracker ids) {}
+
+  /** The current writer's tracker, to skip the shared lookup on every add. */
+  private volatile WriterIds lastWriterIds;
 
   private Term getIdTerm(BytesRef termVal) {
     boolean useRootId = core.getLatestSchema().isUsableForChildDocs();
