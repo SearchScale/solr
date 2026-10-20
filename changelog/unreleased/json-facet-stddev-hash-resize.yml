@@ -1,0 +1,6 @@
+# See https://github.com/apache/solr/blob/main/dev-docs/changelog.adoc
+title: "JSON facets: stddev() in a numeric terms facet no longer fails with ArrayIndexOutOfBoundsException, or returns wrong values, when the facet's hash table grows."
+type: fixed
+authors:
+  - name: Ishan Chattopadhyaya
+    url: https://home.apache.org/phonebook.html?uid=ishan
