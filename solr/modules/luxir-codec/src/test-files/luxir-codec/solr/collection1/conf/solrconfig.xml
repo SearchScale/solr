@@ -1,0 +1,58 @@
+<?xml version="1.0" ?>
+<!--
+ Licensed to the Apache Software Foundation (ASF) under one or more
+ contributor license agreements.  See the NOTICE file distributed with
+ this work for additional information regarding copyright ownership.
+ The ASF licenses this file to You under the Apache License, Version 2.0
+ (the "License"); you may not use this file except in compliance with
+ the License.  You may obtain a copy of the License at
+     http://www.apache.org/licenses/LICENSE-2.0
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<config>
+  <luceneMatchVersion>${tests.luceneMatchVersion:LATEST}</luceneMatchVersion>
+  <dataDir>${solr.data.dir:}</dataDir>
+  <directoryFactory name="DirectoryFactory" class="${solr.directoryFactory:solr.MockDirectoryFactory}"/>
+  <schemaFactory class="ClassicIndexSchemaFactory"/>
+  <!-- per-field postings formats from the schema (the default codec factory) -->
+  <codecFactory class="solr.SchemaCodecFactory"/>
+
+  <updateHandler class="solr.DirectUpdateHandler2">
+    <updateLog><str name="dir">${solr.ulog.dir:}</str></updateLog>
+  </updateHandler>
+
+  <query>
+    <!-- no result caching (every request must run a search), unless a test asks for it -->
+    <queryResultCache size="${luxir.test.queryResultCacheSize:0}"/>
+    <filterCache enabled="${luxir.test.filterCache:false}" size="64"/>
+    <queryResultWindowSize>${luxir.test.queryResultWindowSize:1}</queryResultWindowSize>
+  </query>
+
+  <!-- /select: Solr's default components, with Luxir's query and facet components. -->
+  <searchComponent name="luxirQuery" class="org.apache.solr.luxir.codec.LuxirCodecQueryComponent"/>
+  <searchComponent name="luxirFacet" class="org.apache.solr.luxir.codec.LuxirFacetComponent"/>
+  <searchComponent name="luxirFacetModule" class="org.apache.solr.luxir.codec.LuxirFacetModule"/>
+  <requestHandler name="/select" class="solr.SearchHandler">
+    <arr name="components">
+      <str>luxirQuery</str>
+      <str>luxirFacet</str>
+      <str>luxirFacetModule</str>
+      <str>mlt</str>
+      <str>highlight</str>
+      <str>stats</str>
+      <str>expand</str>
+      <str>terms</str>
+      <str>debug</str>
+    </arr>
+  </requestHandler>
+
+  <!-- Stock Solr over the same index (it reads the Luxir postings through the codec). -->
+  <requestHandler name="/lucene" class="solr.SearchHandler"/>
+
+  <requestHandler name="/update" class="solr.UpdateRequestHandler"/>
+  <requestHandler name="/get" class="solr.RealTimeGetHandler"/>
+</config>

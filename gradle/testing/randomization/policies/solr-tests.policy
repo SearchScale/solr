@@ -32,6 +32,9 @@ grant {
   permission java.io.FilePermission "${java.io.tmpdir}${/}-", "read,write,delete";
 
   permission java.io.FilePermission "${tests.linedocsfile}", "read";
+  // the luxir-codec module's native library and jar (loaded via the FFM API / Lucene SPI)
+  permission java.io.FilePermission "${luxir.lucene.library}", "read";
+  permission java.io.FilePermission "${luxir.lucene.jar}", "read";
   // TestConfigSets messes with these (wtf?)
   permission java.io.FilePermission "/path/to/solr/home/lib", "read";
 

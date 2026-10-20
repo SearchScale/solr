@@ -1,0 +1,51 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// The Foreign Function & Memory API is final in Java 22; Solr's default
+// minimum is 21. Must be set before the java plugin applies its defaults.
+ext.minJavaVersion = JavaVersion.VERSION_22
+ext.minJavaTestVersion = JavaVersion.VERSION_22
+
+apply plugin: 'java-library'
+
+description = 'Luxir postings format (codec) and native search for Solr, via luxir-lucene / FFM'
+
+// luxir-lucene is built separately; point -Pluxir.lucene.jar / -Pluxir.lucene.library elsewhere
+// to use another build.
+def luxirLuceneHome = file(findProperty('luxir.lucene.home') ?: "${rootDir}/../luxir-lucene")
+def luxirLuceneJar = findProperty('luxir.lucene.jar') ?: "${luxirLuceneHome}/build/libs/luxir-lucene-0.1.0-SNAPSHOT.jar"
+def luxirLuceneLibrary = findProperty('luxir.lucene.library') ?: "${rootDir}/../luxir/build/lux4j-release/bin/libluxir_lucene.so"
+
+dependencies {
+  api files(luxirLuceneJar)
+  implementation project(':solr:core')
+  implementation project(':solr:solrj')
+  implementation libs.apache.lucene.analysis.common
+  implementation libs.apache.lucene.core
+  implementation libs.slf4j.api
+
+  testImplementation project(':solr:test-framework')
+  testImplementation libs.apache.lucene.testframework
+  testImplementation libs.junit.junit
+}
+
+tasks.withType(Test).configureEach {
+  systemProperty 'luxir.lucene.library', luxirLuceneLibrary
+  // the test security policy must let the classloader read the jar's SPI registrations
+  systemProperty 'luxir.lucene.jar', file(luxirLuceneJar).absolutePath
+  jvmArgs '--enable-native-access=ALL-UNNAMED'
+}

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+ Licensed to the Apache Software Foundation (ASF) under one or more
+ contributor license agreements.  See the NOTICE file distributed with
+ this work for additional information regarding copyright ownership.
+ The ASF licenses this file to You under the Apache License, Version 2.0
+ (the "License"); you may not use this file except in compliance with
+ the License.  You may obtain a copy of the License at
+     http://www.apache.org/licenses/LICENSE-2.0
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<!-- Luxir value fields (indexed natively) and stock reference copies of each. -->
+<schema name="luxir-values" version="1.7">
+  <uniqueKey>id</uniqueKey>
+  <fieldType name="lx_string" class="org.apache.solr.luxir.codec.LuxirStrField" sortMissingLast="true" docValues="true"/>
+  <fieldType name="lx_string_nodv" class="org.apache.solr.luxir.codec.LuxirStrField" docValues="false"/>
+  <fieldType name="lx_int" class="org.apache.solr.luxir.codec.LuxirIntPointField" docValues="true"/>
+  <fieldType name="lx_long" class="org.apache.solr.luxir.codec.LuxirLongPointField" docValues="true"/>
+  <fieldType name="lx_float" class="org.apache.solr.luxir.codec.LuxirFloatPointField" docValues="true"/>
+  <fieldType name="lx_double" class="org.apache.solr.luxir.codec.LuxirDoublePointField" docValues="true"/>
+  <fieldType name="lx_date" class="org.apache.solr.luxir.codec.LuxirDatePointField" docValues="true"/>
+  <fieldType name="string" class="solr.StrField" sortMissingLast="true" docValues="true"/>
+  <fieldType name="string_nodv" class="solr.StrField" docValues="false"/>
+  <fieldType name="pint" class="solr.IntPointField" docValues="true"/>
+  <fieldType name="plong" class="solr.LongPointField" docValues="true"/>
+  <fieldType name="pfloat" class="solr.FloatPointField" docValues="true"/>
+  <fieldType name="pdouble" class="solr.DoublePointField" docValues="true"/>
+  <fieldType name="pdate" class="solr.DatePointField" docValues="true"/>
+  <fieldType name="text_lx" class="org.apache.solr.luxir.codec.LuxirTextField"/>
+
+  <!-- the uniqueKey stays on Lucene's path (Lucene deletes by its term) -->
+  <field name="id" type="lx_string" indexed="true" stored="true" required="true"/>
+  <field name="_version_" type="plong" indexed="false" stored="false"/>
+  <field name="body" type="text_lx" indexed="true" stored="false"/>
+
+  <field name="kind_s" type="lx_string" indexed="true" stored="false"/>
+  <field name="cats_ss" type="lx_string" indexed="true" stored="false" multiValued="true"/>
+  <field name="tag_s" type="lx_string_nodv" indexed="true" stored="true"/>
+  <field name="code_s" type="lx_string" indexed="false" stored="false"/>
+  <field name="year_i" type="lx_int" indexed="true" stored="false"/>
+  <field name="rev_l" type="lx_long" indexed="true" stored="true"/>
+  <field name="pop_f" type="lx_float" indexed="true" stored="false"/>
+  <field name="q_ds" type="lx_double" indexed="true" stored="false" multiValued="true"/>
+  <field name="n_is" type="lx_int" indexed="true" stored="true" multiValued="true"/>
+  <field name="ts_dt" type="lx_date" indexed="true" stored="false"/>
+
+  <field name="kind_ref" type="string" indexed="true" stored="false"/>
+  <field name="cats_ref" type="string" indexed="true" stored="false" multiValued="true"/>
+  <field name="tag_ref" type="string_nodv" indexed="true" stored="true"/>
+  <field name="code_ref" type="string" indexed="false" stored="false"/>
+  <field name="year_ref" type="pint" indexed="true" stored="false"/>
+  <field name="rev_ref" type="plong" indexed="true" stored="true"/>
+  <field name="pop_ref" type="pfloat" indexed="true" stored="false"/>
+  <field name="q_ref" type="pdouble" indexed="true" stored="false" multiValued="true"/>
+  <field name="n_ref" type="pint" indexed="true" stored="true" multiValued="true"/>
+  <field name="ts_ref" type="pdate" indexed="true" stored="false"/>
+
+  <copyField source="kind_s" dest="kind_ref"/>
+  <copyField source="cats_ss" dest="cats_ref"/>
+  <copyField source="tag_s" dest="tag_ref"/>
+  <copyField source="code_s" dest="code_ref"/>
+  <copyField source="year_i" dest="year_ref"/>
+  <copyField source="rev_l" dest="rev_ref"/>
+  <copyField source="pop_f" dest="pop_ref"/>
+  <copyField source="q_ds" dest="q_ref"/>
+  <copyField source="n_is" dest="n_ref"/>
+  <copyField source="ts_dt" dest="ts_ref"/>
+</schema>
