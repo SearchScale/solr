@@ -697,6 +697,10 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable, SolrI
     return filterCache;
   }
 
+  public SolrCache<QueryResultKey, DocList> getQueryResultCache() {
+    return queryResultCache;
+  }
+
   public SolrCache<Integer, float[]> getFeatureVectorCache() {
     return featureVectorCache;
   }
