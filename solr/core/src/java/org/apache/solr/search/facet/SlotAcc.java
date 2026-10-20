@@ -567,7 +567,7 @@ public abstract class SlotAcc implements Closeable {
     public void resize(Resizer resizer) {
       super.resize(resizer);
       this.counts = resizer.resize(this.counts, 0);
-      this.result = resizer.resize(this.result, 0);
+      this.sum = resizer.resize(this.sum, 0);
     }
 
     private double stdDev(int slot) {
