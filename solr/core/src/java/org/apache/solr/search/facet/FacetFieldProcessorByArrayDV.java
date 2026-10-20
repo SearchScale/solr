@@ -101,6 +101,25 @@ class FacetFieldProcessorByArrayDV extends FacetFieldProcessorByArray {
     final List<SweepCountAccStruct> others = SweepingCountSlotAcc.otherStructsOf(this);
     assert null != base;
 
+    if (fcontext.accelerator != null
+        && others.isEmpty()
+        && allBucketsAcc == null
+        && base.docSet == fcontext.base) {
+      List<FacetAccelerator.Agg> aggs =
+          collectAcc == null ? List.of() : FacetAccelerator.describe(collectAcc);
+      if (aggs != null
+          && fcontext.accelerator.collectOrds(
+              fcontext,
+              sf,
+              ordinalMap,
+              startTermIndex,
+              nTerms,
+              base.countAcc::incrementCount,
+              aggs)) {
+        return;
+      }
+    }
+
     // TODO: refactor some of this logic into a base class
     boolean countOnly = collectAcc == null && allBucketsAcc == null;
     boolean fullRange = startTermIndex == 0 && endTermIndex == si.getValueCount();

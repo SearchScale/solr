@@ -89,6 +89,11 @@ class FacetFieldProcessorByHashDV extends FacetFieldProcessor {
 
     /** returns the slot */
     int add(long val) {
+      return add(val, 1);
+    }
+
+    /** Adds {@code n} (> 0) occurrences of val; returns the slot */
+    int add(long val, long n) {
       if (cardinality >= threshold) {
         rehash();
       }
@@ -97,23 +102,42 @@ class FacetFieldProcessorByHashDV extends FacetFieldProcessor {
       for (int slot = h & (vals.length - 1); ; slot = (slot + ((h >> 7) | 1)) & (vals.length - 1)) {
         long count = counts[slot];
         if (count == 0) {
-          counts[slot] = 1;
+          counts[slot] = n;
           vals[slot] = val;
           cardinality++;
           return slot;
         } else if (vals[slot] == val) {
           // val is already in the set
-          counts[slot] = count + 1;
+          counts[slot] = count + n;
           return slot;
         }
       }
     }
 
     protected void rehash() {
+      rehash(vals.length << 1);
+    }
+
+    /**
+     * Makes room for {@code n} more values in one resize; for a table no slot accumulators share
+     * (their slots are not remapped).
+     */
+    void ensureRoomFor(int n) {
+      int newCapacity = vals.length;
+      while (newCapacity < (1 << 30)
+          && (int) (newCapacity * LOAD_FACTOR) < (long) cardinality + n) {
+        newCapacity <<= 1;
+      }
+      if (newCapacity > vals.length) {
+        rehash(newCapacity);
+        oldToNewMapping = null;
+      }
+    }
+
+    private void rehash(int newCapacity) {
       long[] oldVals = vals;
       // after retrieving the count, this array is reused as a mapping to new array
       long[] oldCounts = counts;
-      int newCapacity = vals.length << 1;
       vals = new long[newCapacity];
       counts = new long[newCapacity];
       threshold = (int) (newCapacity * LOAD_FACTOR);
@@ -385,6 +409,26 @@ class FacetFieldProcessorByHashDV extends FacetFieldProcessor {
           });
 
     } else { // Numeric:
+
+      if (fcontext.accelerator != null
+          && collectAcc == null
+          && allBucketsAcc == null
+          && fcontext.accelerator.countValues(
+              fcontext,
+              sf,
+              new FacetAccelerator.ValueCount() {
+                @Override
+                public void expect(int n) {
+                  table.ensureRoomFor(n);
+                }
+
+                @Override
+                public void accept(long value, long count) {
+                  table.add(value, count);
+                }
+              })) {
+        return; // counts only: per distinct value
+      }
 
       if (sf.multiValued()) {
         DocSetUtil.collectSortedDocSet(

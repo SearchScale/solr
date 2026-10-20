@@ -355,6 +355,13 @@ public abstract class FacetProcessor<T extends FacetRequest> {
       return count;
     }
 
+    if (fcontext.accelerator != null) {
+      List<FacetAccelerator.Agg> aggs = describe(accs);
+      if (aggs != null && fcontext.accelerator.collectSlot(fcontext, docs, slot, aggs)) {
+        return docs.size();
+      }
+    }
+
     final List<LeafReaderContext> leaves = searcher.getIndexReader().leaves();
     final Iterator<LeafReaderContext> ctxIt = leaves.iterator();
     LeafReaderContext ctx = null;
@@ -381,6 +388,18 @@ public abstract class FacetProcessor<T extends FacetRequest> {
       collect(doc - segBase, slot, slotContext); // per-seg collectors
     }
     return count;
+  }
+
+  /** The aggregations of {@code accs} (null: none) for the accelerator, or null if not all are. */
+  static List<FacetAccelerator.Agg> describe(SlotAcc[] accs) {
+    List<FacetAccelerator.Agg> aggs = new ArrayList<>();
+    if (accs == null) return aggs;
+    for (SlotAcc acc : accs) {
+      List<FacetAccelerator.Agg> one = FacetAccelerator.describe(acc);
+      if (one == null) return null;
+      aggs.addAll(one);
+    }
+    return aggs;
   }
 
   void collect(int segDoc, int slot, IntFunction<SlotContext> slotContext) throws IOException {

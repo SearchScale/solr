@@ -42,6 +42,7 @@ public class FacetContext {
   boolean cache = true;
   int flags;
   FacetDebugInfo debugInfo;
+  FacetAccelerator accelerator; // null: processors collect in Java
 
   public void setDebugInfo(FacetDebugInfo debugInfo) {
     this.debugInfo = debugInfo;
@@ -73,6 +74,11 @@ public class FacetContext {
 
   public SolrIndexSearcher getSearcher() {
     return searcher;
+  }
+
+  /** The fast paths for this request's document collection, or null. */
+  public FacetAccelerator getAccelerator() {
+    return accelerator;
   }
 
   public Query getFilter() {
@@ -108,6 +114,7 @@ public class FacetContext {
     ctx.qcontext = qcontext;
     ctx.req = req;
     ctx.searcher = searcher;
+    ctx.accelerator = accelerator;
 
     return ctx;
   }

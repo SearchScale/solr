@@ -604,7 +604,12 @@ abstract class FacetFieldProcessor extends FacetProcessor<FacetField> {
     // have a method like "DocSet applyConstraint(facet context, DocSet parent)"
     // that's needed for domain changing things like joins anyway???
 
-    if (otherAccs != null) {
+    if (otherAccs != null && collectDeferred(subDomain, resortAcc)) {
+      // all collected in one pass over the domain
+      for (SlotAcc acc : otherAccs) {
+        acc.setValues(target, acc == resortAcc ? slot.resortSlotNum : 0);
+      }
+    } else if (otherAccs != null) {
       // do acc at a time (traversing domain each time) or do all accs for each doc?
       for (SlotAcc acc : otherAccs) {
         if (acc == resortAcc) {
@@ -624,6 +629,24 @@ abstract class FacetFieldProcessor extends FacetProcessor<FacetField> {
     }
 
     processSubs(target, filter, subDomain, false, null);
+  }
+
+  /**
+   * Collects a bucket's domain to slot 0 of the deferred accumulators (all but {@code resortAcc})
+   * through the accelerator; false (nothing collected) if there is none or it declines.
+   */
+  private boolean collectDeferred(DocSet subDomain, SlotAcc resortAcc) throws IOException {
+    if (fcontext.accelerator == null) return false;
+    List<SlotAcc> accs = new ArrayList<>(otherAccs.length);
+    for (SlotAcc acc : otherAccs) {
+      if (acc != resortAcc) accs.add(acc);
+    }
+    List<FacetAccelerator.Agg> aggs = describe(accs.toArray(new SlotAcc[0]));
+    if (aggs == null) return false;
+    for (SlotAcc acc : accs) acc.reset(); // TODO (as below): only needed if previously used
+    // reset may replace arrays: describe again
+    aggs = describe(accs.toArray(new SlotAcc[0]));
+    return fcontext.accelerator.collectSlot(fcontext, subDomain, 0, aggs);
   }
 
   /**

@@ -1,0 +1,6 @@
+# See https://github.com/apache/solr/blob/main/dev-docs/changelog.adoc
+title: "JSON Facet API: a FacetModule subclass can supply a FacetAccelerator, which may collect the documents of terms, range, query and stats facets itself (for example natively, for a codec that keeps doc values outside Java)."
+type: added
+authors:
+  - name: Ishan Chattopadhyaya
+    url: https://home.apache.org/phonebook.html?uid=ishan
