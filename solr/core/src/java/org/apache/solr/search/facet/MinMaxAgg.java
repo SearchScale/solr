@@ -245,7 +245,20 @@ public class MinMaxAgg extends SimpleAggValueSource {
     }
   }
 
-  class DFuncAcc extends SlotAcc.DoubleFuncSlotAcc {
+  /** A min/max accumulator over a numeric value source, for {@link FacetAccelerator#describe}. */
+  interface MinMaxAcc {
+    /** This accumulator as an accelerated aggregation of {@code field}, or null. */
+    FacetAccelerator.Agg describe(String field, FacetAccelerator.Values values);
+  }
+
+  class DFuncAcc extends SlotAcc.DoubleFuncSlotAcc implements MinMaxAcc {
+    @Override
+    public FacetAccelerator.Agg describe(String field, FacetAccelerator.Values values) {
+      FacetAccelerator.Op op =
+          minmax == 1 ? FacetAccelerator.Op.MIN_DOUBLE : FacetAccelerator.Op.MAX_DOUBLE;
+      return new FacetAccelerator.Agg(op, field, values, result, null, null, null, null);
+    }
+
     public DFuncAcc(ValueSource values, FacetContext fcontext, int numSlots) {
       super(values, fcontext, numSlots, Double.NaN);
     }
@@ -274,8 +287,18 @@ public class MinMaxAgg extends SimpleAggValueSource {
     }
   }
 
-  class LFuncAcc extends SlotAcc.LongFuncSlotAcc {
+  class LFuncAcc extends SlotAcc.LongFuncSlotAcc implements MinMaxAcc {
     FixedBitSet exists;
+
+    @Override
+    public FacetAccelerator.Agg describe(String field, FacetAccelerator.Values values) {
+      if (values != FacetAccelerator.Values.INT && values != FacetAccelerator.Values.LONG) {
+        return null; // longVal of a float or double: not a native rule
+      }
+      FacetAccelerator.Op op =
+          minmax == 1 ? FacetAccelerator.Op.MIN_LONG : FacetAccelerator.Op.MAX_LONG;
+      return new FacetAccelerator.Agg(op, field, values, null, null, result, null, exists);
+    }
 
     public LFuncAcc(ValueSource values, FacetContext fcontext, int numSlots) {
       super(values, fcontext, numSlots, 0);
@@ -340,7 +363,16 @@ public class MinMaxAgg extends SimpleAggValueSource {
     }
   }
 
-  class DateFuncAcc extends SlotAcc.LongFuncSlotAcc {
+  class DateFuncAcc extends SlotAcc.LongFuncSlotAcc implements MinMaxAcc {
+    @Override
+    public FacetAccelerator.Agg describe(String field, FacetAccelerator.Values values) {
+      if (values != FacetAccelerator.Values.INT && values != FacetAccelerator.Values.LONG)
+        return null;
+      FacetAccelerator.Op op =
+          minmax == 1 ? FacetAccelerator.Op.MIN_DATE : FacetAccelerator.Op.MAX_DATE;
+      return new FacetAccelerator.Agg(op, field, values, null, null, result, null, null);
+    }
+
     private static final long MISSING = Long.MIN_VALUE;
 
     public DateFuncAcc(ValueSource values, FacetContext fcontext, int numSlots) {
