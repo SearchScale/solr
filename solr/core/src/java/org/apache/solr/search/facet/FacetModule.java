@@ -118,6 +118,14 @@ public class FacetModule extends SearchComponent {
     rb.req.getContext().put(FacetComponentState.class, fcState);
   }
 
+  /**
+   * The fast paths that this request's facet processors may collect documents with (see {@link
+   * FacetAccelerator}), or null (the default) to collect in Java.
+   */
+  protected FacetAccelerator accelerator(ResponseBuilder rb) {
+    return null;
+  }
+
   @Override
   @SuppressWarnings({"unchecked"})
   public void process(ResponseBuilder rb) throws IOException {
@@ -134,6 +142,7 @@ public class FacetModule extends SearchComponent {
     fcontext.searcher = rb.req.getSearcher();
     fcontext.qcontext = QueryContext.newContext(fcontext.searcher);
     fcontext.cache = cache;
+    fcontext.accelerator = accelerator(rb);
     if (isShard) {
       fcontext.flags |= FacetContext.IS_SHARD;
       fcontext.facetInfo =

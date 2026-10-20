@@ -527,12 +527,16 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
 
     createAccs(fcontext.base.size(), slotCount);
 
-    for (int idx = 0; idx < rangeList.size(); idx++) {
-      rangeStats(rangeList.get(idx), idx, hasSubFacets);
-    }
+    if (!hasSubFacets && accelerated(slotCount)) {
+      // every slot counted and aggregated in one pass
+    } else {
+      for (int idx = 0; idx < rangeList.size(); idx++) {
+        rangeStats(rangeList.get(idx), idx, hasSubFacets);
+      }
 
-    for (int idx = 0; idx < otherList.size(); idx++) {
-      rangeStats(otherList.get(idx), rangeList.size() + idx, hasSubFacets);
+      for (int idx = 0; idx < otherList.size(); idx++) {
+        rangeStats(otherList.get(idx), rangeList.size() + idx, hasSubFacets);
+      }
     }
 
     final SimpleOrderedMap res = new SimpleOrderedMap<>();
@@ -568,18 +572,35 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
   private Query[] filters;
   private DocSet[] intersections;
 
+  /** Whether the accelerator collected every range (and other) slot. */
+  private boolean accelerated(int slotCount) throws IOException {
+    if (fcontext.accelerator == null) return false;
+    List<FacetAccelerator.Agg> aggs = describe(accs);
+    if (aggs == null) return false;
+    Query[] queries = new Query[slotCount];
+    for (int idx = 0; idx < rangeList.size(); idx++) queries[idx] = rangeQuery(rangeList.get(idx));
+    for (int idx = 0; idx < otherList.size(); idx++) {
+      queries[rangeList.size() + idx] = rangeQuery(otherList.get(idx));
+    }
+    return fcontext.accelerator.collectRanges(
+        fcontext, sf, queries, countAcc::incrementCount, aggs);
+  }
+
+  private Query rangeQuery(Range range) {
+    return sf.getType()
+        .getRangeQuery(
+            null,
+            sf,
+            range.low == null ? null : calc.formatValue(range.low),
+            range.high == null ? null : calc.formatValue(range.high),
+            range.includeLower,
+            range.includeUpper);
+  }
+
   private void rangeStats(Range range, int slot, boolean hasSubFacets) throws IOException {
     final Query rangeQ;
     {
-      final Query rangeQuery =
-          sf.getType()
-              .getRangeQuery(
-                  null,
-                  sf,
-                  range.low == null ? null : calc.formatValue(range.low),
-                  range.high == null ? null : calc.formatValue(range.high),
-                  range.includeLower,
-                  range.includeUpper);
+      final Query rangeQuery = rangeQuery(range);
       if (fcontext.cache) {
         rangeQ = rangeQuery;
       } else if (rangeQuery instanceof ExtendedQuery) {
