@@ -203,6 +203,36 @@ If that's a requirement for your implementation, you can force a hard commit by 
 
 With this configuration, when you call `commitWithin` as part of your update message, it will automatically perform a hard commit every time.
 
+== Adding Documents with New IDs
+
+Solr normally adds each document together with a delete of any earlier document with the same unique key.
+Lucene buffers every such delete and applies them all when it flushes a segment, which costs noticeable CPU when most documents are new.
+
+Without a transaction log, outside SolrCloud and with a `uniqueKey` field, `DirectUpdateHandler2` therefore remembers a 64-bit hash of every ID in the index.
+It reads them from the index the first time the index writer is used, and then records each added ID.
+A document whose ID cannot be in the index yet is added without the delete; a repeated ID, or a hash collision, takes the normal path.
+
+`solr.update.skipDeleteForNewIds`::
++
+[%autowidth,frame=none]
+|===
+|Optional |Default: `true`
+|===
++
+Set to `false` to always add documents together with the delete.
+
+`solr.update.skipDeleteForNewIds.maxIds`::
++
+[%autowidth,frame=none]
+|===
+|Optional |Default: `33554432`
+|===
++
+The most IDs remembered for one index writer, at about 16 bytes of heap each.
+Past this, every add takes the normal path until the next index writer.
+
+The hashes are not used after `mergeIndexes`, or when the index writer already had uncommitted changes the first time it was used.
+
 
 == Transaction Log
 
