@@ -1,0 +1,6 @@
+# See https://github.com/apache/solr/blob/main/dev-docs/changelog.adoc
+title: "For plugins: AddUpdateCommand.makeLuceneDocs() is now protected, so a subclass can supply documents it built itself, and SolrIndexSearcher.getQueryResultCache() returns the searcher's query result cache."
+type: other
+authors:
+  - name: Ishan Chattopadhyaya
+    url: https://home.apache.org/phonebook.html?uid=ishan
