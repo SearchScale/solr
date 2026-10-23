@@ -20,13 +20,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TotalHits;
-import org.apache.lucene.util.BitSetIterator;
-import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.CursorMarkParams;
@@ -40,7 +37,6 @@ import org.apache.solr.search.BitDocSet;
 import org.apache.solr.search.DocList;
 import org.apache.solr.search.DocListAndSet;
 import org.apache.solr.search.DocSet;
-import org.apache.solr.search.DocSetUtil;
 import org.apache.solr.search.DocSlice;
 import org.apache.solr.search.ExtendedQuery;
 import org.apache.solr.search.PostFilter;
@@ -51,7 +47,6 @@ import org.apache.solr.search.QueryUtils;
 import org.apache.solr.search.SolrCache;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.search.SortSpec;
-import org.apache.solr.search.SortedIntDocSet;
 import org.apache.solr.search.WrappedQuery;
 import org.apache.solr.search.stats.LocalStatsCache;
 import org.apache.solr.uninverting.UninvertingReader;
@@ -268,7 +263,8 @@ public class LuxirCodecQueryComponent extends QueryComponent {
             && solrSet == cached
             && positiveSets == 1
             && !anyNegative
-            && solrSet.getBits() == filter;
+            && solrSet instanceof BitDocSet bds
+            && bds.getBits() == filter;
 
     // minExactCount: count exactly up to max(minExactCount, rows), as Lucene's collectors do.
     int minExactCount = needDocSet ? Integer.MAX_VALUE : cmd.getMinExactCount();
@@ -367,25 +363,17 @@ public class LuxirCodecQueryComponent extends QueryComponent {
       uncached.setCache(false);
       return searcher.getDocSet(uncached);
     }
-    int size = (int) res.totalHits();
-    FixedBitSet matches = res.matches();
-    DocSet set;
-    if (size <= DocSetUtil.smallSetSize(searcher.maxDoc())) {
-      int[] docs = new int[size];
-      DocIdSetIterator it = new BitSetIterator(matches, size);
-      for (int i = 0, d = it.nextDoc(); d != DocIdSetIterator.NO_MORE_DOCS; d = it.nextDoc()) {
-        docs[i++] = d;
-      }
-      set = new SortedIntDocSet(docs, size);
-    } else {
-      set = new BitDocSet(matches, size);
-    }
-    return DocSetUtil.getDocSet(set, searcher);
+    // Kept as bits even when small: the native path takes a filter as bits, and a cached BitDocSet's
+    // own bits let Luxir keep its native copy across requests (a SortedIntDocSet would be expanded
+    // into new bits on every request).
+    return new BitDocSet(res.matches(), (int) res.totalHits());
   }
 
   static FixedBitSet bits(DocSet set, int maxDoc) {
-    Bits b = set.getBits();
-    if (b instanceof FixedBitSet f && f.length() >= maxDoc) return f;
+    // only a BitDocSet's bits are free: other sets build theirs (a SortedIntDocSet hashes every doc)
+    if (set instanceof BitDocSet bds && bds.getBits() instanceof FixedBitSet f && f.length() >= maxDoc) {
+      return f;
+    }
     FixedBitSet f = new FixedBitSet(Math.max(1, maxDoc));
     set.addAllTo(f);
     return f;
