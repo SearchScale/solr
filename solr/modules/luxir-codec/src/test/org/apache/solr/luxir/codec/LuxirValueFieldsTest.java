@@ -260,6 +260,41 @@ public class LuxirValueFieldsTest extends SolrTestCaseJ4 {
   }
 
   @Test
+  public void testJoins() throws Exception {
+    // the native join (Luxir string columns) against Solr's join (the reference fields)
+    String[] joins = {
+      "{!join from=kind_s to=kind_s}year_i:[2000 TO 2010]",
+      "{!join from=kind_s to=kind_s}kind_s:k3",
+      "{!join from=kind_s to=kind_s}year_i:{* TO 1000}",
+      "{!join from=kind_s to=kind_s}kind_s:nomatch",
+      "{!join from=kind_s to=kind_s}ts_dt:[2010-01-01T00:00:00Z TO 2015-06-01T00:00:00Z]",
+      "{!join from=kind_s to=kind_s}body:text",
+    };
+    for (String j : joins) {
+      same("q", "*:*", "fq", j, "fl", "id", "sort", "id asc", "rows", "2000");
+      same("q", "year_i:[2000 TO *]", "fq", j, "fl", "id", "sort", "id asc", "rows", "2000");
+      same("q", j, "fl", "id", "sort", "id asc", "rows", "2000");
+    }
+  }
+
+  @Test
+  public void testFilteredRangesAndFirstK() throws Exception {
+    // a range behind a selective filter (verified per filter doc) and the first k of a constant
+    // score query (taken from the match bits), with scores, by Solr's default relevance order
+    String[][] cases = {
+      {"year_i:[2000 TO 2010]", "kind_s:k3"},
+      {"ts_dt:[2010-01-01T00:00:00Z TO 2015-06-01T00:00:00Z]", "kind_s:k2"},
+      {"rev_l:[400000000000 TO 400000050000]", "year_i:[2000 TO 2003]"},
+      {"pop_f:[-10 TO 50.5]", "kind_s:k1"},
+    };
+    for (String[] c : cases) {
+      same("q", c[0], "fq", c[1], "fl", "id", "sort", "id asc", "rows", "2000");
+      same("q", c[0], "fq", c[1], "fl", "id,score", "rows", "10");
+      same("q", c[0], "fq", c[1], "fq", "-kind_s:k4", "fl", "id,score", "rows", "7", "start", "3");
+    }
+  }
+
+  @Test
   public void testFacetsSortsAndValues() throws Exception {
     for (String method : new String[] {"fc", "enum", "fcs"}) {
       same(

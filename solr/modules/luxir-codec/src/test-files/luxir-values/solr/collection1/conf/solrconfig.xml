@@ -51,6 +51,9 @@
   <!-- Stock Solr over the same index (it reads the Luxir postings through the codec). -->
   <requestHandler name="/lucene" class="solr.SearchHandler"/>
 
+  <!-- joins between Luxir string columns run natively; the reference fields fall back to Solr's join -->
+  <queryParser name="join" class="org.apache.solr.luxir.codec.LuxirJoinQParserPlugin"/>
+
   <requestHandler name="/update" class="org.apache.solr.luxir.codec.LuxirUpdateRequestHandler"/>
   <requestHandler name="/update-standard" class="solr.UpdateRequestHandler"/>
   <requestHandler name="/get" class="solr.RealTimeGetHandler"/>
