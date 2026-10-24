@@ -47,6 +47,7 @@ import org.apache.solr.search.QueryUtils;
 import org.apache.solr.search.SolrCache;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.search.SortSpec;
+import org.apache.solr.search.SortedIntDocSet;
 import org.apache.solr.search.WrappedQuery;
 import org.apache.solr.search.stats.LocalStatsCache;
 import org.apache.solr.uninverting.UninvertingReader;
@@ -272,7 +273,15 @@ public class LuxirCodecQueryComponent extends QueryComponent {
     LuxirSearch.Result res =
         sort != null
             ? LuxirSearch.topKSorted(
-                searcher, cmd.getQuery(), nativeFilters, sort, k, filter, filterCached, needDocSet)
+                searcher,
+                cmd.getQuery(),
+                nativeFilters,
+                sort,
+                k,
+                filter,
+                filterCached,
+                needDocSet,
+                true)
             : LuxirSearch.topK(
                 searcher,
                 cmd.getQuery(),
@@ -281,7 +290,8 @@ public class LuxirCodecQueryComponent extends QueryComponent {
                 minExactCount,
                 filter,
                 filterCached,
-                needDocSet);
+                needDocSet,
+                true);
     if (res == null) {
       if (rb.isDebug()) {
         debugPath(rb, "lucene", LuxirSearch.whyNotNative(searcher, cmd.getQuery(), nativeFilters));
@@ -310,7 +320,12 @@ public class LuxirCodecQueryComponent extends QueryComponent {
     if (needDocSet) {
       DocListAndSet listAndSet = new DocListAndSet();
       listAndSet.docList = page;
-      listAndSet.docSet = new BitDocSet(res.matches(), (int) res.totalHits());
+      // few matches come as sorted doc ids, as Solr's own collector keeps them; the native facet
+      // paths take those as they are instead of a bitset of every doc
+      listAndSet.docSet =
+          res.matchDocs() != null
+              ? new SortedIntDocSet(res.matchDocs())
+              : new BitDocSet(res.matches(), (int) res.totalHits());
       result.setDocListAndSet(listAndSet);
     } else {
       result.setDocList(page);

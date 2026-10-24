@@ -25,13 +25,14 @@ import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.OrdinalMap;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.LongValues;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.search.DocSet;
 import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.search.SortedIntDocSet;
 import org.apache.solr.search.facet.FacetAccelerator;
 import org.apache.solr.search.facet.FacetContext;
+import org.luxir.lucene.search.DocMatches;
 import org.luxir.lucene.search.LuxirFacets;
 import org.luxir.lucene.search.NativeFacetCollector;
 
@@ -53,7 +54,7 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
 
   /**
    * Docs with a value sampled before numeric values are judged mostly distinct (see {@link
-   * LuxirFacets#valueCounts(LeafReaderContext, String, FixedBitSet, int, LuxirFacets.ValueSink)});
+   * LuxirFacets#valueCounts(LeafReaderContext, String, DocMatches, int, LuxirFacets.ValueSink)});
    * tests lower it to reach that path on small indexes.
    */
   static int nearUniqueSample = LuxirFacets.NEAR_UNIQUE_SAMPLE;
@@ -67,10 +68,10 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
     SolrIndexSearcher searcher = fcontext.getSearcher();
     List<NativeFacetCollector.Agg> nativeAggs = nativeAggs(searcher, aggs);
     if (nativeAggs == null) return false;
-    FixedBitSet bits = LuxirCodecQueryComponent.bits(docs, searcher.maxDoc());
+    DocMatches matches = matches(docs, searcher.maxDoc());
     try (NativeFacetCollector c = new NativeFacetCollector(nativeAggs, slot, 0)) {
       for (LeafReaderContext leaf : searcher.getTopReaderContext().leaves()) {
-        c.collectSlot(leaf, bits, slot);
+        c.collectSlot(leaf, matches, slot);
       }
       c.finish();
     }
@@ -95,7 +96,7 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
     }
     List<NativeFacetCollector.Agg> nativeAggs = nativeAggs(searcher, aggs);
     if (nativeAggs == null) return false;
-    FixedBitSet bits = LuxirCodecQueryComponent.bits(fcontext.getBase(), searcher.maxDoc());
+    DocMatches matches = matches(fcontext.getBase(), searcher.maxDoc());
     long[] counts;
     try (NativeFacetCollector c = new NativeFacetCollector(nativeAggs, -1, nTerms)) {
       for (LeafReaderContext leaf : searcher.getTopReaderContext().leaves()) {
@@ -108,7 +109,7 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
           long s = g - startTermIndex;
           ordSlots[o] = s >= 0 && s < nTerms ? (int) s : -1;
         }
-        c.collectOrds(leaf, bits, field.getName(), ordSlots);
+        c.collectOrds(leaf, matches, field.getName(), ordSlots);
       }
       counts = c.finish();
     }
@@ -131,13 +132,13 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
     if (bounds == null) return false;
     List<NativeFacetCollector.Agg> nativeAggs = nativeAggs(searcher, aggs);
     if (nativeAggs == null) return false;
-    FixedBitSet bits = LuxirCodecQueryComponent.bits(fcontext.getBase(), searcher.maxDoc());
+    DocMatches matches = matches(fcontext.getBase(), searcher.maxDoc());
     int kind = LuxirRangeFacetProcessor.kind(field);
     long[] counts;
     try (NativeFacetCollector c =
         new NativeFacetCollector(nativeAggs, -1, Math.max(1, rangeQueries.length))) {
       for (LeafReaderContext leaf : searcher.getTopReaderContext().leaves()) {
-        c.collectRanges(leaf, bits, field.getName(), kind, bounds[0], bounds[1]);
+        c.collectRanges(leaf, matches, field.getName(), kind, bounds[0], bounds[1]);
       }
       counts = c.finish();
     }
@@ -155,7 +156,7 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
     for (LeafReaderContext leaf : leaves) {
       if (!LuxirFacets.nativeValues(leaf, field.getName())) return false; // checked above
     }
-    FixedBitSet bits = LuxirCodecQueryComponent.bits(fcontext.getBase(), searcher.maxDoc());
+    DocMatches matches = matches(fcontext.getBase(), searcher.maxDoc());
     LuxirFacets.ValueSink sink =
         new LuxirFacets.ValueSink() {
           @Override
@@ -169,10 +170,17 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
           }
         };
     for (LeafReaderContext leaf : leaves) {
-      LuxirFacets.valueCounts(leaf, field.getName(), bits, nearUniqueSample, sink);
+      LuxirFacets.valueCounts(leaf, field.getName(), matches, nearUniqueSample, sink);
     }
     ACCELERATED.incrementAndGet(VALUES);
     return true;
+  }
+
+  /** A doc set for the native collectors: a sorted int set's own docs, else bits. */
+  private static DocMatches matches(DocSet set, int maxDoc) {
+    if (set instanceof SortedIntDocSet sorted)
+      return DocMatches.of(sorted.getDocs(), sorted.size());
+    return DocMatches.of(LuxirCodecQueryComponent.bits(set, maxDoc));
   }
 
   private static void addCounts(SlotCounts slotCounts, long[] counts) {
