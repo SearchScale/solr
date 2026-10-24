@@ -53,5 +53,17 @@
 
   <requestHandler name="/update" class="org.apache.solr.luxir.codec.LuxirUpdateRequestHandler"/>
   <requestHandler name="/update-standard" class="solr.UpdateRequestHandler"/>
+  <requestHandler name="/update/json/docs" class="org.apache.solr.luxir.codec.LuxirUpdateRequestHandler">
+    <lst name="invariants">
+      <str name="update.contentType">application/json</str>
+      <str name="json.command">false</str>
+    </lst>
+  </requestHandler>
+  <requestHandler name="/update/json/docs-standard" class="solr.UpdateRequestHandler">
+    <lst name="invariants">
+      <str name="update.contentType">application/json</str>
+      <str name="json.command">false</str>
+    </lst>
+  </requestHandler>
   <requestHandler name="/get" class="solr.RealTimeGetHandler"/>
 </config>

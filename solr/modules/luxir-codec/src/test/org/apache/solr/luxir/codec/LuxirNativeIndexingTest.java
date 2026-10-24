@@ -204,6 +204,7 @@ public class LuxirNativeIndexingTest extends SolrTestCaseJ4 {
       ContentStreamBase.StringStream body =
           new ContentStreamBase.StringStream(json, "application/json");
       ((org.apache.solr.request.SolrQueryRequestBase) req).setContentStreams(List.of(body));
+      req.getContext().put("path", handler); // as a request over HTTP
       SolrQueryResponse rsp = new SolrQueryResponse();
       h.getCore().execute(h.getCore().getRequestHandler(handler), req, rsp);
       if (rsp.getException() != null) throw rsp.getException();
@@ -272,6 +273,50 @@ public class LuxirNativeIndexingTest extends SolrTestCaseJ4 {
         "/response/docs/[0]/body_lx==['command form']");
     assertU(delQ("id:(j1 j2 j3 j4 s1 s2)"));
     assertU(commit());
+  }
+
+  @Test
+  public void testFastJsonLoaderOnDocsPath() throws Exception {
+    // documents one after another and in an array, as /update/json/docs takes them
+    String docs =
+        "{\"id\":\"d1\",\"body_lx\":\"stream \\\"one\\\"\",\"year\":2001,\"cat\":\"c1\"}\n"
+            + "[{\"id\":\"d2\",\"body_lx\":[\"stream two\",\"more\"],\"cat\":null},"
+            + "{\"id\":\"d3\",\"body_lx\":\"plain\",\"body_lx\":\"again\",\"year\":1999}]\n";
+    String other = docs.replace("\"d", "\"e");
+    long fastBefore = FastJsonDocsLoader.FAST_REQUESTS.sum();
+    post("/update/json/docs", docs);
+    assertEquals("fast path used", fastBefore + 1, FastJsonDocsLoader.FAST_REQUESTS.sum());
+    post("/update/json/docs-standard", other);
+    // a nested object, and a split parameter, go to Solr's loader
+    post("/update/json/docs", "{\"id\":\"d4\",\"body_lx\":\"nested\",\"n\":{\"note_ref\":\"z\"}}");
+    post(
+        "/update/json/docs",
+        "{\"id\":\"d5\",\"body_lx\":\"split\"}",
+        "split",
+        "/",
+        "f",
+        "id:/id",
+        "f",
+        "body_lx:/body_lx");
+    assertEquals("fallbacks", fastBefore + 1, FastJsonDocsLoader.FAST_REQUESTS.sum());
+    assertU(commit());
+    for (String[] pair : new String[][] {{"d1", "e1"}, {"d2", "e2"}, {"d3", "e3"}}) {
+      String[] fl = {"fl", "body_lx,note_lx,year,cat", "wt", "json", "omitHeader", "true"};
+      String fast = h.query(req(concat(new String[] {"q", "id:" + pair[0]}, fl)));
+      String std = h.query(req(concat(new String[] {"q", "id:" + pair[1]}, fl)));
+      assertEquals(std, fast);
+    }
+    assertJQ(req("q", "body_lx:stream", "fl", "id"), "/response/numFound==4");
+    assertJQ(req("q", "id:(d4 d5)", "fl", "id"), "/response/numFound==2");
+    assertJQ(req("q", "n.note_ref:z", "fl", "id"), "/response/numFound==1");
+    assertU(delQ("id:(d1 d2 d3 d4 d5 e1 e2 e3)"));
+    assertU(commit());
+  }
+
+  private static String[] concat(String[] a, String[] b) {
+    String[] out = java.util.Arrays.copyOf(a, a.length + b.length);
+    System.arraycopy(b, 0, out, a.length, b.length);
+    return out;
   }
 
   @Test

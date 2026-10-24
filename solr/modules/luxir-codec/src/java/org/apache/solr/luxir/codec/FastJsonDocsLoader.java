@@ -26,11 +26,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.params.UpdateParams;
 import org.apache.solr.common.util.ByteArrayUtf8CharSequence;
 import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.common.util.ContentStreamBase;
+import org.apache.solr.handler.UpdateRequestHandler;
 import org.apache.solr.handler.loader.ContentStreamLoader;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
@@ -42,9 +44,12 @@ import org.apache.solr.update.processor.UpdateRequestProcessor;
  * flat documents, string values become zero-copy UTF-8 slices of the request ({@link
  * ByteArrayUtf8CharSequence}), so text bound for a {@link LuxirTextField} reaches Luxir without
  * ever becoming a Java String. Where the update chain allows it, documents go straight to Lucene
- * documents ({@link DirectDocBuilder}) without a {@code SolrInputDocument}. Anything else (command
- * objects, atomic updates, child documents, split/mapping parameters) goes to Solr's standard JSON
- * loader unchanged.
+ * documents ({@link DirectDocBuilder}) without a {@code SolrInputDocument}. Bodies of documents
+ * only ({@code /update/json/docs}, or {@code json.command=false}) are read the same way when they
+ * are flat documents, one after another or in an array, split at the root with each field under its
+ * own name (Solr's default {@code split=/} and {@code f=$FQN:/**}): those parameters then map each
+ * document to itself. Anything else (command objects, atomic updates, child documents, other
+ * split/mapping parameters) goes to Solr's standard JSON loader unchanged.
  */
 public class FastJsonDocsLoader extends ContentStreamLoader {
   // JsonLoader parameters that change how a body is read: leave those requests to it
@@ -83,7 +88,11 @@ public class FastJsonDocsLoader extends ContentStreamLoader {
     }
     SolrParams params = req.getParams();
     List<Parsed> docs = null;
-    if (!hasSpecialParams(params)) docs = new Parser(body).docs();
+    if (docsOnly(req)) {
+      if (identitySplit(params)) docs = new Parser(body).docStream();
+    } else if (!hasSpecialParams(params)) {
+      docs = new Parser(body).docs();
+    }
     if (docs == null) {
       ContentStreamBase.ByteArrayStream copy =
           new ContentStreamBase.ByteArrayStream(body, stream.getName());
@@ -107,6 +116,29 @@ public class FastJsonDocsLoader extends ContentStreamLoader {
       cmd.commitWithin = commitWithin;
       processor.processAdd(cmd);
     }
+  }
+
+  // As Solr's JSON loader: the body holds documents only, read by split and field mappings
+  private static boolean docsOnly(SolrQueryRequest req) {
+    return UpdateRequestHandler.DOC_PATH.equals(req.getContext().get(CommonParams.PATH))
+        || "false".equals(req.getParams().get("json.command"));
+  }
+
+  // Solr's default split and mapping, which index a flat document as it is, and nothing else
+  private static boolean identitySplit(SolrParams params) {
+    String split = params.get("split");
+    String[] f = params.getParams("f");
+    if (split != null && !split.equals("/")) return false;
+    if (f != null && !(f.length == 1 && f[0].equals("$FQN:/**"))) return false;
+    var names = params.getParameterNamesIterator();
+    while (names.hasNext()) {
+      String n = names.next();
+      if (n.equals("srcField")
+          || n.equals("mapUniqueKeyOnly")
+          || n.equals("echo")
+          || n.startsWith("split.")) return false;
+    }
+    return true;
   }
 
   private static boolean hasSpecialParams(SolrParams params) {
@@ -167,6 +199,39 @@ public class FastJsonDocsLoader extends ContentStreamLoader {
 
     Parser(byte[] b) {
       this.b = b;
+    }
+
+    /**
+     * Flat documents one after another, each alone or in an array, as Solr reads a body of
+     * documents split at the root; null for anything else.
+     */
+    List<Parsed> docStream() {
+      try {
+        List<Parsed> out = new ArrayList<>();
+        for (ws(); p < b.length; ws()) {
+          if (peek() != '[') {
+            out.add(doc());
+            continue;
+          }
+          p++;
+          ws();
+          if (peek() == ']') {
+            p++;
+            continue;
+          }
+          for (; ; ) {
+            ws();
+            out.add(doc());
+            ws();
+            byte c = next();
+            if (c == ']') break;
+            if (c != ',') throw UNSUPPORTED;
+          }
+        }
+        return out;
+      } catch (Unsupported | ArrayIndexOutOfBoundsException | NumberFormatException e) {
+        return null;
+      }
     }
 
     List<Parsed> docs() {
@@ -264,22 +329,47 @@ public class FastJsonDocsLoader extends ContentStreamLoader {
     // a string, number, boolean or null; objects and nested arrays are not handled here
     private Object scalar() {
       byte c = peek();
-      switch (c) {
-        case '"':
-          return string();
-        case 't':
-          literal("true");
-          return Boolean.TRUE;
-        case 'f':
-          literal("false");
-          return Boolean.FALSE;
-        case 'n':
-          literal("null");
-          return null;
-        default:
-          if (c == '-' || (c >= '0' && c <= '9')) return number();
-          throw UNSUPPORTED;
-      }
+      if (c == '"') return string();
+      if (c == '-' || (c >= '0' && c <= '9')) return number();
+      if (bareStart(c)) return bare();
+      throw UNSUPPORTED;
+    }
+
+    /**
+     * An unquoted word, which Solr's parser reads as true, false, null or else a string (such as
+     * {@code Infinity} in some data sets). Only ASCII words are read here.
+     */
+    private Object bare() {
+      int start = p++;
+      while (p < b.length && bareChar(b[p])) p++;
+      if (p < b.length && (b[p] == '\\' || b[p] < 0)) throw UNSUPPORTED; // escapes, non-ASCII
+      int len = p - start;
+      if (len == 4
+          && b[start] == 't'
+          && b[start + 1] == 'r'
+          && b[start + 2] == 'u'
+          && b[start + 3] == 'e') return Boolean.TRUE;
+      if (len == 4
+          && b[start] == 'n'
+          && b[start + 1] == 'u'
+          && b[start + 2] == 'l'
+          && b[start + 3] == 'l') return null;
+      if (len == 5
+          && b[start] == 'f'
+          && b[start + 1] == 'a'
+          && b[start + 2] == 'l'
+          && b[start + 3] == 's'
+          && b[start + 4] == 'e') return Boolean.FALSE;
+      return new ByteArrayUtf8CharSequence(b, start, len);
+    }
+
+    // As Solr's parser (Java identifier characters), for ASCII
+    private static boolean bareStart(byte c) {
+      return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$';
+    }
+
+    private static boolean bareChar(byte c) {
+      return bareStart(c) || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '/';
     }
 
     private Object number() {
@@ -313,13 +403,6 @@ public class FastJsonDocsLoader extends ContentStreamLoader {
       }
       String s = new String(b, start, p - start, StandardCharsets.US_ASCII);
       return real ? (Object) Double.parseDouble(s) : (Object) Long.parseLong(s);
-    }
-
-    private void literal(String word) {
-      for (int i = 0; i < word.length(); i++) {
-        if (b[p + i] != word.charAt(i)) throw UNSUPPORTED;
-      }
-      p += word.length();
     }
 
     /** Advances p to the next quote or backslash, eight bytes at a time. */
