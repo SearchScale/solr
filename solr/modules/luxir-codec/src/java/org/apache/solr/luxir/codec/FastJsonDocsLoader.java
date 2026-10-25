@@ -49,7 +49,9 @@ import org.apache.solr.update.processor.UpdateRequestProcessor;
  * are flat documents, one after another or in an array, split at the root with each field under its
  * own name (Solr's default {@code split=/} and {@code f=$FQN:/**}): those parameters then map each
  * document to itself. Anything else (command objects, atomic updates, child documents, other
- * split/mapping parameters) goes to Solr's standard JSON loader unchanged.
+ * split/mapping parameters) goes to Solr's standard JSON loader unchanged. Date strings of Luxir
+ * date fields arrive parsed, as the chain's parse-date processor would parse them ({@link
+ * LuxirDateValues}).
  */
 public class FastJsonDocsLoader extends ContentStreamLoader {
   // JsonLoader parameters that change how a body is read: leave those requests to it
@@ -104,7 +106,13 @@ public class FastJsonDocsLoader extends ContentStreamLoader {
     boolean overwrite = params.getBool(UpdateParams.OVERWRITE, true);
     int commitWithin = params.getInt(UpdateParams.COMMIT_WITHIN, -1);
     DirectDocBuilder builder = direct ? DirectDocBuilder.forRequest(req) : null;
+    LuxirDateValues dates = LuxirDateValues.forRequest(req);
     for (Parsed doc : docs) {
+      if (dates != null) {
+        for (int i = 0; i < doc.size; i++) {
+          if (dates.handles(doc.keys[i])) doc.values[i] = dates.parse(doc.values[i]);
+        }
+      }
       AddUpdateCommand cmd = builder == null ? null : builder.command(req, doc);
       if (cmd == null) {
         cmd = new AddUpdateCommand(req);

@@ -313,6 +313,59 @@ public class LuxirNativeIndexingTest extends SolrTestCaseJ4 {
     assertU(commit());
   }
 
+  @Test
+  public void testDatesParsedAsTheChainWould() throws Exception {
+    String[] values = {
+      "2019-10-01 00:00:00 UTC", // the chain's second format
+      "2019-10-01T05:06:07Z", // its first
+      "2019-10-01 01:02 PST", // another zone
+      "2019-02-29 00:00:00 UTC", // lenient: March 1st
+      "'2019-10-02 00:00:00 UTC'", // quoted
+      "2019-10-03 00:00:00 UTC"
+    };
+    StringBuilder docs = new StringBuilder();
+    for (int i = 0; i < values.length; i++) {
+      docs.append("{\"id\":\"t")
+          .append(i)
+          .append("\",\"when_ldt\":\"")
+          .append(values[i])
+          .append("\"}\n");
+    }
+    // a value no format parses, and a field the chain renames, are left to the chain
+    docs.append("{\"id\":\"t9\",\"when ldt\":\"2019-10-04 00:00:00 UTC\"}\n");
+    long parsedBefore = LuxirDateValues.PARSED.sum();
+    post("/update/json/docs", docs.toString(), "update.chain", "parse-dates");
+    assertEquals("parsed by Luxir", parsedBefore + values.length, LuxirDateValues.PARSED.sum());
+    post(
+        "/update/json/docs-standard",
+        docs.toString().replace("\"t", "\"u"),
+        "update.chain",
+        "parse-dates");
+    assertEquals("standard path", parsedBefore + values.length, LuxirDateValues.PARSED.sum());
+    // without the chain, dates are left to the field type
+    post("/update/json/docs", "{\"id\":\"v1\",\"when_ldt\":\"2019-10-05T00:00:00Z\"}");
+    assertEquals("no chain", parsedBefore + values.length, LuxirDateValues.PARSED.sum());
+    assertU(commit());
+    for (int i = 0; i <= 9; i++) {
+      if (i > values.length - 1 && i < 9) continue;
+      String[] fl = {"fl", "when_ldt", "wt", "json", "omitHeader", "true"};
+      String fast = h.query(req(concat(new String[] {"q", "id:t" + i}, fl)));
+      String std = h.query(req(concat(new String[] {"q", "id:u" + i}, fl)));
+      assertEquals(std, fast);
+    }
+    assertJQ(
+        req("q", "id:t0", "fl", "when_ldt"), "/response/docs/[0]/when_ldt=='2019-10-01T00:00:00Z'");
+    assertJQ(
+        req("q", "id:t3", "fl", "when_ldt"), "/response/docs/[0]/when_ldt=='2019-03-01T00:00:00Z'");
+    assertJQ(
+        req("q", "id:t9", "fl", "when_ldt"), "/response/docs/[0]/when_ldt=='2019-10-04T00:00:00Z'");
+    assertJQ(
+        req("q", "when_ldt:[2019-10-01T00:00:00Z TO 2019-10-02T00:00:00Z]", "fl", "id"),
+        "/response/numFound==8");
+    assertU(delQ("id:(t0 t1 t2 t3 t4 t5 t9 u0 u1 u2 u3 u4 u5 u9 v1)"));
+    assertU(commit());
+  }
+
   private static String[] concat(String[] a, String[] b) {
     String[] out = java.util.Arrays.copyOf(a, a.length + b.length);
     System.arraycopy(b, 0, out, a.length, b.length);

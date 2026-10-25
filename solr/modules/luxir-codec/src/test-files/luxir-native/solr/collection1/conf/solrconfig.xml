@@ -66,4 +66,23 @@
     </lst>
   </requestHandler>
   <requestHandler name="/get" class="solr.RealTimeGetHandler"/>
+
+  <!-- date strings parsed by the update chain, as in schemaless configsets -->
+  <updateRequestProcessorChain name="parse-dates">
+    <processor class="solr.RemoveBlankFieldUpdateProcessorFactory"/>
+    <processor class="solr.FieldNameMutatingUpdateProcessorFactory">
+      <str name="pattern">[^\w-\.]</str>
+      <str name="replacement">_</str>
+    </processor>
+    <processor class="solr.ParseLongFieldUpdateProcessorFactory"/>
+    <processor class="solr.ParseDateFieldUpdateProcessorFactory">
+      <arr name="format">
+        <str>yyyy-MM-dd['T'[HH:mm[:ss[.SSS]][z</str>
+        <str>yyyy-MM-dd HH:mm[:ss[.SSS]][ z</str>
+      </arr>
+    </processor>
+    <processor class="solr.LogUpdateProcessorFactory"/>
+    <processor class="solr.DistributedUpdateProcessorFactory"/>
+    <processor class="solr.RunUpdateProcessorFactory"/>
+  </updateRequestProcessorChain>
 </config>

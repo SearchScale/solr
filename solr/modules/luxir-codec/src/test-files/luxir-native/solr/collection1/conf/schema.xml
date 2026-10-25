@@ -18,6 +18,7 @@
   <fieldType name="string" class="solr.StrField" sortMissingLast="true" docValues="true"/>
   <fieldType name="plong" class="solr.LongPointField" docValues="true"/>
   <fieldType name="pint" class="solr.IntPointField" docValues="true"/>
+  <fieldType name="pdate_lx" class="org.apache.solr.luxir.codec.LuxirDatePointField" docValues="true"/>
 
   <!-- Luxir analyzes and inverts these fields itself -->
   <fieldType name="text_lx" class="org.apache.solr.luxir.codec.LuxirTextField"/>
@@ -39,6 +40,7 @@
   <field name="_text_ref" type="text_ref" indexed="true" stored="false" multiValued="true"/>
   <dynamicField name="*_lx" type="text_lx" indexed="true" stored="true"/>
   <dynamicField name="*_ref" type="text_ref" indexed="true" stored="false"/>
+  <dynamicField name="*_ldt" type="pdate_lx" indexed="true" stored="true"/>
 
   <copyField source="title_lx" dest="title_ref"/>
   <copyField source="body_lx" dest="body_ref"/>
