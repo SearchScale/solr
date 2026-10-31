@@ -66,7 +66,28 @@ public interface FacetAccelerator {
     /** if missing: l0 += 1: missing(). */
     MISSING,
     /** if present: i0 += 1, d0 += value * value, d1 += value: variance() and stddev(). */
-    VARIANCE
+    VARIANCE,
+    /**
+     * unique() or hll() of a string field: each value's global ordinal into its slot's set of the
+     * target ({@link UniqueOrds}).
+     */
+    UNIQUE_ORDS,
+    /** unique() or hll() of a numeric field: each raw value to its slot of the target ({@link UniqueValues}). */
+    UNIQUE_VALUES
+  }
+
+  /** Where unique() and hll() of a string field collect: global ordinals per slot. */
+  interface UniqueOrds {
+    /** The field's global ordinal map; null when the index has one segment (ordinals are global). */
+    OrdinalMap ordinalMap() throws IOException;
+
+    /** The slot's set of global ordinals (created if needed). */
+    FixedBitSet slot(int slot) throws IOException;
+  }
+
+  /** Where unique() and hll() of a numeric field collect: raw doc values per slot. */
+  interface UniqueValues {
+    void add(int slot, long value) throws IOException;
   }
 
   /** How the field's numeric doc value reads, as Solr's field value source for it reads it. */
@@ -89,7 +110,21 @@ public interface FacetAccelerator {
       double[] d1,
       long[] l0,
       int[] i0,
-      FixedBitSet exists) {}
+      FixedBitSet exists,
+      Object target) {
+    /** A plain aggregation, updating the accumulator's arrays. */
+    public Agg(
+        Op op,
+        String field,
+        Values values,
+        double[] d0,
+        double[] d1,
+        long[] l0,
+        int[] i0,
+        FixedBitSet exists) {
+      this(op, field, values, d0, d1, l0, i0, exists, null);
+    }
+  }
 
   /**
    * Collects {@code docs} to {@code slot} of the aggregations (the processor counts the docs
@@ -151,8 +186,8 @@ public interface FacetAccelerator {
 
   /**
    * The aggregations that the accumulator updates, or null if any part of it is not a plain
-   * aggregation over a single-valued numeric field's values (a function, a string, a multi-valued
-   * field, unique(), percentile(), relatedness() and so on).
+   * aggregation over a single-valued numeric field's values, or unique() or hll() of a field with
+   * doc values (not a function, percentile(), relatedness() and so on).
    */
   static List<Agg> describe(SlotAcc acc) {
     List<Agg> out = new ArrayList<>();
@@ -164,6 +199,14 @@ public interface FacetAccelerator {
       for (SlotAcc sub : multi.subAccs) {
         if (!describe(sub, out)) return false;
       }
+      return true;
+    }
+    if (acc instanceof UniqueOrds u && acc instanceof UniqueSlotAcc us) {
+      out.add(new Agg(Op.UNIQUE_ORDS, us.field.getName(), null, null, null, null, null, null, u));
+      return true;
+    }
+    if (acc instanceof UniqueValues u && acc instanceof DocValuesAcc dv) {
+      out.add(new Agg(Op.UNIQUE_VALUES, dv.sf.getName(), null, null, null, null, null, null, u));
       return true;
     }
     if (!(acc instanceof SlotAcc.FuncSlotAcc func)) return false;

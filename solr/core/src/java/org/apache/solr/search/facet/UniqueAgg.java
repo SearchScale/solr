@@ -125,7 +125,7 @@ public class UniqueAgg extends StrAggValueSource {
     }
   }
 
-  abstract static class BaseNumericAcc extends DocValuesAcc {
+  abstract static class BaseNumericAcc extends DocValuesAcc implements FacetAccelerator.UniqueValues {
     LongSet[] sets;
 
     public BaseNumericAcc(FacetContext fcontext, String field, int numSlots) throws IOException {
@@ -153,6 +153,15 @@ public class UniqueAgg extends StrAggValueSource {
     }
 
     protected abstract void collectValues(int doc, LongSet set) throws IOException;
+
+    @Override
+    public void add(int slot, long value) {
+      LongSet set = sets[slot];
+      if (set == null) {
+        set = sets[slot] = new LongHashSet(16);
+      }
+      set.add(value);
+    }
 
     @Override
     public Object getValue(int slot) throws IOException {

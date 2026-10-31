@@ -31,6 +31,7 @@ import org.apache.solr.search.DocSet;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.search.SortedIntDocSet;
 import org.apache.solr.search.facet.FacetAccelerator;
+import org.apache.solr.search.facet.FacetAccelerator.Op;
 import org.apache.solr.search.facet.FacetContext;
 import org.luxir.lucene.search.DocMatches;
 import org.luxir.lucene.search.LuxirFacets;
@@ -40,7 +41,8 @@ import org.luxir.lucene.search.NativeFacetCollector;
  * JSON facet collection by Luxir, for fields whose doc values every segment keeps natively: terms
  * facets on string fields, range facets on point fields, numeric terms counts, and the plain
  * aggregations (sum, avg, min, max, sumsq, countvals, missing, variance, stddev) of single-valued
- * point fields, for buckets and for a whole domain. Each segment's documents are counted and
+ * point fields, for buckets and for a whole domain; for a whole domain also unique() and hll() of
+ * string and point fields. Each segment's documents are counted and
  * aggregated in one native pass with the same rules as Solr's slot accumulators, in doc order, so
  * results are identical. Anything else is left to Solr.
  */
@@ -66,17 +68,72 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
       throws IOException {
     if (aggs.isEmpty()) return true; // nothing to aggregate: the processor counts the docs
     SolrIndexSearcher searcher = fcontext.getSearcher();
-    List<NativeFacetCollector.Agg> nativeAggs = nativeAggs(searcher, aggs);
+    List<Agg> plain = new ArrayList<>(aggs.size());
+    List<Agg> unique = new ArrayList<>();
+    for (Agg a : aggs) (unique(a) ? unique : plain).add(a);
+    List<NativeFacetCollector.Agg> nativeAggs = nativeAggs(searcher, plain);
     if (nativeAggs == null) return false;
-    DocMatches matches = matches(docs, searcher.maxDoc());
-    try (NativeFacetCollector c = new NativeFacetCollector(nativeAggs, slot, 0)) {
-      for (LeafReaderContext leaf : searcher.getTopReaderContext().leaves()) {
-        c.collectSlot(leaf, matches, slot);
-      }
-      c.finish();
+    for (Agg a : unique) {
+      if (!uniqueField(searcher, a)) return false;
     }
+    if (!nativeAggs.isEmpty()) {
+      DocMatches matches = matches(docs, searcher.maxDoc());
+      try (NativeFacetCollector c = new NativeFacetCollector(nativeAggs, slot, 0)) {
+        for (LeafReaderContext leaf : searcher.getTopReaderContext().leaves()) {
+          c.collectSlot(leaf, matches, slot);
+        }
+        c.finish();
+      }
+    }
+    if (!unique.isEmpty()) collectUnique(searcher, docs, slot, unique);
     ACCELERATED.incrementAndGet(SLOT);
     return true;
+  }
+
+  private static boolean unique(Agg a) {
+    return a.op() == Op.UNIQUE_ORDS || a.op() == Op.UNIQUE_VALUES;
+  }
+
+  /** Whether a unique() or hll() reads doc values every segment keeps natively. */
+  private static boolean uniqueField(SolrIndexSearcher searcher, Agg a) {
+    SchemaField sf = searcher.getSchema().getFieldOrNull(a.field());
+    if (sf == null || !sf.hasDocValues()) return false;
+    if (a.op() == Op.UNIQUE_VALUES) return pointField(searcher, sf);
+    DocValuesType dv = sf.multiValued() ? DocValuesType.SORTED_SET : DocValuesType.SORTED;
+    return LuxirFacets.nativeField(searcher, sf.getName(), dv);
+  }
+
+  /**
+   * unique() and hll() of the docs into one slot: each segment's touched ordinals (mapped to
+   * global ones) or distinct values, counted natively, go to the accumulator as Solr's per-doc
+   * collection would put them.
+   */
+  private static void collectUnique(SolrIndexSearcher searcher, DocSet docs, int slot, List<Agg> unique)
+      throws IOException {
+    org.apache.lucene.util.FixedBitSet bits = LuxirCodecQueryComponent.bits(docs, searcher.maxDoc());
+    DocMatches matches = DocMatches.of(bits);
+    for (Agg a : unique) {
+      String field = a.field();
+      if (a.op() == Op.UNIQUE_ORDS) {
+        FacetAccelerator.UniqueOrds target = (FacetAccelerator.UniqueOrds) a.target();
+        OrdinalMap ordMap = target.ordinalMap();
+        org.apache.lucene.util.FixedBitSet set = target.slot(slot);
+        for (LeafReaderContext leaf : searcher.getTopReaderContext().leaves()) {
+          int segOrds = (int) DocValues.getSortedSet(leaf.reader(), field).getValueCount();
+          if (segOrds == 0) continue;
+          LongValues toGlobal = ordMap == null ? null : ordMap.getGlobalOrds(leaf.ord);
+          for (int o : LuxirFacets.sparseOrdCounts(leaf, field, bits, segOrds).ords()) {
+            set.set(toGlobal == null ? o : (int) toGlobal.get(o));
+          }
+        }
+      } else {
+        FacetAccelerator.UniqueValues target = (FacetAccelerator.UniqueValues) a.target();
+        LuxirFacets.ValueSink sink = (value, count, firstDoc) -> target.add(slot, value);
+        for (LeafReaderContext leaf : searcher.getTopReaderContext().leaves()) {
+          LuxirFacets.valueCounts(leaf, field, matches, nearUniqueSample, sink);
+        }
+      }
+    }
   }
 
   @Override
@@ -208,6 +265,7 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
       SolrIndexSearcher searcher, List<Agg> aggs) {
     List<NativeFacetCollector.Agg> out = new ArrayList<>(aggs.size());
     for (Agg a : aggs) {
+      if (unique(a)) return null; // per slot of many, only Solr keeps them
       SchemaField sf = searcher.getSchema().getFieldOrNull(a.field());
       if (sf == null || sf.multiValued() || !pointField(searcher, sf)) return null;
       out.add(

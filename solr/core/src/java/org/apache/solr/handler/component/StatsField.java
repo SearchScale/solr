@@ -23,18 +23,21 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.EnumSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.queries.function.valuesource.FieldCacheSource;
 import org.apache.lucene.search.Query;
-import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
@@ -42,9 +45,11 @@ import org.apache.solr.common.params.StatsParams;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.request.DocValuesStats;
 import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.NumberType;
 import org.apache.solr.schema.SchemaField;
+import org.apache.solr.schema.StrField;
 import org.apache.solr.search.DocIterator;
 import org.apache.solr.search.DocSet;
 import org.apache.solr.search.QParser;
@@ -438,10 +443,63 @@ public class StatsField {
       // TODO: should this also be used for single-valued string fields? (should work fine)
       return DocValuesStats.getCounts(searcher, this, base, facets);
     } else {
+      StatsValues accelerated = acceleratedStats(base);
+      if (accelerated != null) return accelerated;
       // either a single valued field we pull from FieldCache, or an explicit
       // function ValueSource
       return computeLocalValueSourceStats(base);
     }
+  }
+
+  /**
+   * The stats of a single-valued numeric or string field from a {@link StatsAccelerator} in the
+   * request context, accumulated doc by doc in doc order as computeLocalValueSourceStats would;
+   * null if there is none or it cannot.
+   */
+  private StatsValues acceleratedStats(DocSet base) throws IOException {
+    if (schemaField == null
+        || facets.length != 0
+        || schemaField.multiValued()
+        || !schemaField.hasDocValues()
+        || !(rb.req.getContext().get(StatsAccelerator.CONTEXT_KEY) instanceof StatsAccelerator acc)) {
+      return null;
+    }
+    FieldType ft = schemaField.getType();
+    NumberType type = ft.getNumberType();
+    if (type == null && !(ft instanceof StrField)) return null;
+    final StatsValues allstats = StatsValuesFactory.createStatsValues(this);
+    final String name = schemaField.getName();
+    StatsAccelerator.ValueSink sink =
+        new StatsAccelerator.ValueSink() {
+          LeafReaderContext ctx;
+          SortedDocValues terms;
+
+          @Override
+          public void accept(LeafReaderContext leaf, int doc, boolean present, long value)
+              throws IOException {
+            if (!present) {
+              allstats.missing();
+              return;
+            }
+            if (type == null) {
+              if (leaf != ctx) {
+                ctx = leaf;
+                terms = DocValues.getSorted(leaf.reader(), name);
+              }
+              allstats.accumulateValue(terms.lookupOrd((int) value).utf8ToString());
+              return;
+            }
+            allstats.accumulateValue(
+                switch (type) {
+                  case INTEGER -> Integer.valueOf((int) value);
+                  case LONG -> Long.valueOf(value);
+                  case FLOAT -> Float.valueOf(Float.intBitsToFloat((int) value));
+                  case DOUBLE -> Double.valueOf(Double.longBitsToDouble(value));
+                  case DATE -> (Object) new Date(value);
+                });
+          }
+        };
+    return acc.values(searcher, schemaField, base, sink) ? allstats : null;
   }
 
   private StatsValues computeLocalValueSourceStats(DocSet base) throws IOException {

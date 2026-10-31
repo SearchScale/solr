@@ -28,7 +28,7 @@ import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.LongValues;
 import org.apache.solr.schema.SchemaField;
 
-class UniqueMultiDvSlotAcc extends UniqueSlotAcc {
+class UniqueMultiDvSlotAcc extends UniqueSlotAcc implements FacetAccelerator.UniqueOrds {
   SortedSetDocValues topLevel;
   SortedSetDocValues[] subDvs;
   OrdinalMap ordMap;
@@ -57,6 +57,21 @@ class UniqueMultiDvSlotAcc extends UniqueSlotAcc {
   @Override
   protected BytesRef lookupOrd(int ord) throws IOException {
     return topLevel.lookupOrd(ord);
+  }
+
+  // FacetAccelerator.UniqueOrds: the accelerator collects without setNextReader
+  @Override
+  public OrdinalMap ordinalMap() throws IOException {
+    if (topLevel == null) resetIterators();
+    return ordMap;
+  }
+
+  @Override
+  public FixedBitSet slot(int slot) throws IOException {
+    if (topLevel == null) resetIterators();
+    FixedBitSet bits = arr[slot];
+    if (bits == null) bits = arr[slot] = new FixedBitSet(nTerms);
+    return bits;
   }
 
   @Override

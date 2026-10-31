@@ -555,6 +555,29 @@ public class LuxirValueFieldsTest extends SolrTestCaseJ4 {
   }
 
   @Test
+  public void testStatsComponent() throws Exception {
+    // every stat but percentiles (t-digest breaks ties at random), of single-valued fields read
+    // natively in bulk, in doc order: equal to Solr's per-doc reading of the reference fields
+    String all =
+        "{!min=true max=true sum=true count=true missing=true sumOfSquares=true mean=true"
+            + " stddev=true countDistinct=true distinctValues=true cardinality=true}";
+    long before = LuxirStatsAccelerator.ACCELERATED.get();
+    for (String q : new String[] {"*:*", "kind_s:k1", "body:text", "year_i:[2000 TO *] -kind_s:k3"}) {
+      same("q", q, "rows", "0", "stats", "true", "stats.field", all + "year_i", "stats.field",
+          all + "rev_l", "stats.field", all + "pop_f", "stats.field", all + "ts_dt", "stats.field",
+          all + "kind_s");
+      same("q", q, "rows", "0", "stats", "true", "stats.field", "{!countDistinct=true}year_i",
+          "stats.field", "{!cardinality=0.5}rev_l", "stats.field", "{!key=k min=true}kind_s");
+    }
+    assertTrue("stats read natively", LuxirStatsAccelerator.ACCELERATED.get() > before);
+    // multi-valued, without native doc values, faceted, functions: Solr's own reading
+    same("q", "*:*", "rows", "0", "stats", "true", "stats.field", all + "q_ds", "stats.field",
+        all + "code_s", "stats.field", "{!sum=true}n_is");
+    same("q", "*:*", "rows", "0", "stats", "true", "stats.field", "year_i", "stats.facet", "kind_s");
+    same("q", "*:*", "rows", "0", "stats", "true", "stats.field", "{!func}sum(year_i,1)");
+  }
+
+  @Test
   public void testRealTimeGetAndUpdates() throws Exception {
     assumeTrue("needs the update log", h.getCore().getUpdateHandler().getUpdateLog() != null);
     assertU(

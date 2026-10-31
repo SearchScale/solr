@@ -158,7 +158,7 @@ public class LuxirJsonFacetTest extends SolrTestCaseJ4 {
 
   @Test
   public void testOthersTakeSolrsPath() throws Exception {
-    // functions, multi-valued and string aggregations, unique/hll/percentile, hashing, relatedness
+    // functions, multi-valued and string aggregations, percentile, hashing, relatedness
     facet("{s:'sum(mul(year_i,2))',u:'unique(kind_s)',h:'hll(code_s)',p:'percentile(pop_f,50)'}");
     facet("{k:{type:terms,field:kind_s,facet:{s:'sum(n_is)',m:'min(code_s)',a:'avg(q_ds)'}}}");
     facet("{k:{type:terms,field:kind_s,method:dvhash}}");
@@ -171,6 +171,21 @@ public class LuxirJsonFacetTest extends SolrTestCaseJ4 {
           "back", "*:*",
           "json.facet", "{k:{type:terms,field:kind_s,facet:{r:'relatedness($fore,$back)'}}}");
     }
+  }
+
+  @Test
+  public void testUniqueAndHll() throws Exception {
+    // a whole domain: unique() and hll() of string and point fields, single- and multi-valued,
+    // natively, alone and with the plain aggregations
+    long slot = accelerated(LuxirFacetAccelerator.SLOT);
+    facet("{u:'unique(kind_s)',c:'unique(cats_ss)',y:'unique(year_i)',n:'unique(n_is)'}");
+    facet("{h:'hll(kind_s)',hc:'hll(cats_ss)',hy:'hll(pop_f)',hn:'hll(n_is)',ht:'hll(ts_dt)'}");
+    facet("{u:'unique(ts_dt)',p:'unique(pop_f)'," + STATS + "}");
+    facet("{q:{type:query,q:'year_i:[2000 TO *]',facet:{u:'unique(kind_s)',r:'unique(rev_l)',s:'sum(pop_f)'}}}");
+    assertTrue("unique() and hll() collected natively", accelerated(LuxirFacetAccelerator.SLOT) > slot);
+    // per bucket, and on a field without native doc values: Solr's path, same results
+    facet("{k:{type:terms,field:kind_s,facet:{u:'unique(cats_ss)',y:'unique(year_i)'}}}");
+    facet("{u:'unique(code_s)',h:'hll(code_s)',y:'unique(year_i)'}");
   }
 
   @Test

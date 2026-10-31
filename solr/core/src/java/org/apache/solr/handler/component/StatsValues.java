@@ -55,6 +55,14 @@ public interface StatsValues {
   void missing();
 
   /**
+   * Accumulate a value of a single doc, as {@link #accumulate(int)} would have read it from the
+   * doc values (an Integer, Long, Float, Double, Date or String).
+   */
+  default void accumulateValue(Object value) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Updates the statistics when multiple documents are missing a value
    *
    * @param count number of times to count a missing value

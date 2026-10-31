@@ -33,6 +33,7 @@ import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.handler.component.QueryComponent;
 import org.apache.solr.handler.component.ResponseBuilder;
+import org.apache.solr.handler.component.StatsAccelerator;
 import org.apache.solr.response.BasicResultContext;
 import org.apache.solr.search.BitDocSet;
 import org.apache.solr.search.DocList;
@@ -90,6 +91,8 @@ public class LuxirCodecQueryComponent extends QueryComponent {
 
   @Override
   public void process(ResponseBuilder rb) throws IOException {
+    // the stats component (after this one) reads native doc values in bulk
+    rb.req.getContext().put(StatsAccelerator.CONTEXT_KEY, LuxirStatsAccelerator.INSTANCE);
     if (rb.getQuery() instanceof MatchAllDocsQuery && fieldSort(rb) == null) {
       // Solr answers match-all from its cached live docs (and filters from the filter cache);
       // sorted by a field, it reads every doc's value, which Luxir's top-k does natively

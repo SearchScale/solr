@@ -268,6 +268,12 @@ public class StatsValuesFactory {
       accumulate(typedValue, count);
     }
 
+    @Override
+    @SuppressWarnings({"unchecked"})
+    public void accumulateValue(Object value) {
+      accumulate((T) value, 1);
+    }
+
     public void accumulate(T value, int count) {
       assert null != value : "Can't accumulate null";
 

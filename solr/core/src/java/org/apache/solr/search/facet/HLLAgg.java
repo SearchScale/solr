@@ -126,7 +126,7 @@ public class HLLAgg extends StrAggValueSource {
   // TODO: hybrid model for non-distrib numbers?
   // todo - better efficiency for sorting?
 
-  abstract class BaseNumericAcc extends DocValuesAcc {
+  abstract class BaseNumericAcc extends DocValuesAcc implements FacetAccelerator.UniqueValues {
     HLL[] sets;
 
     public BaseNumericAcc(FacetContext fcontext, String field, int numSlots) throws IOException {
@@ -154,6 +154,15 @@ public class HLLAgg extends StrAggValueSource {
     }
 
     protected abstract void collectValues(int doc, HLL hll) throws IOException;
+
+    @Override
+    public void add(int slot, long value) {
+      HLL hll = sets[slot];
+      if (hll == null) {
+        hll = sets[slot] = factory.getHLL();
+      }
+      hll.addRaw(Hash.fmix64(value));
+    }
 
     @Override
     public Object getValue(int slot) throws IOException {
