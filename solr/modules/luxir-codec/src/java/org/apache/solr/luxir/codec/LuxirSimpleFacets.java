@@ -35,7 +35,6 @@ import org.apache.lucene.queries.function.FunctionValues;
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CharsRefBuilder;
-import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.LongValues;
 import org.apache.lucene.util.PriorityQueue;
 import org.apache.solr.common.params.FacetParams;
@@ -49,6 +48,7 @@ import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.search.DocSet;
 import org.apache.solr.util.LongPriorityQueue;
+import org.luxir.lucene.search.DocMatches;
 import org.luxir.lucene.search.LuxirFacets;
 
 /**
@@ -113,7 +113,8 @@ public class LuxirSimpleFacets extends SimpleFacets {
             field,
             FacetParams.FACET_SORT,
             limit > 0 ? FacetParams.FACET_SORT_COUNT : FacetParams.FACET_SORT_INDEX);
-    FixedBitSet docs = LuxirCodecQueryComponent.bits(parsed.docs, searcher.maxDoc());
+    // a sorted int set's own docs, else bits: a few matches cost no pass over every doc
+    DocMatches docs = LuxirFacetAccelerator.matches(parsed.docs, searcher.maxDoc());
     if (numeric) {
       if (mincount <= 0) {
         // as SimpleFacets does for point fields (SOLR-10033, SOLR-11174)
@@ -141,7 +142,7 @@ public class LuxirSimpleFacets extends SimpleFacets {
   private NamedList<Integer> stringCounts(
       SchemaField schemaField,
       DocSet docSet,
-      FixedBitSet docs,
+      DocMatches docs,
       int offset,
       int limit,
       int mincount,
@@ -326,7 +327,7 @@ public class LuxirSimpleFacets extends SimpleFacets {
   /** NumericFacets' single-valued point path (no zeros), counting natively. */
   private NamedList<Integer> numericCounts(
       SchemaField sf,
-      FixedBitSet docs,
+      DocMatches docs,
       int offset,
       int limit,
       int mincount,

@@ -562,6 +562,8 @@ public class LuxirValueFieldsTest extends SolrTestCaseJ4 {
         "{!min=true max=true sum=true count=true missing=true sumOfSquares=true mean=true"
             + " stddev=true countDistinct=true distinctValues=true cardinality=true}";
     long before = LuxirStatsAccelerator.ACCELERATED.get();
+    int minDocs = LuxirStatsAccelerator.minDocs;
+    LuxirStatsAccelerator.minDocs = 1; // the test index is small
     for (String q : new String[] {"*:*", "kind_s:k1", "body:text", "year_i:[2000 TO *] -kind_s:k3"}) {
       same("q", q, "rows", "0", "stats", "true", "stats.field", all + "year_i", "stats.field",
           all + "rev_l", "stats.field", all + "pop_f", "stats.field", all + "ts_dt", "stats.field",
@@ -570,6 +572,8 @@ public class LuxirValueFieldsTest extends SolrTestCaseJ4 {
           "stats.field", "{!cardinality=0.5}rev_l", "stats.field", "{!key=k min=true}kind_s");
     }
     assertTrue("stats read natively", LuxirStatsAccelerator.ACCELERATED.get() > before);
+    LuxirStatsAccelerator.minDocs = minDocs;
+    same("q", "kind_s:k1", "rows", "0", "stats", "true", "stats.field", all + "year_i"); // per doc
     // multi-valued, without native doc values, faceted, functions: Solr's own reading
     same("q", "*:*", "rows", "0", "stats", "true", "stats.field", all + "q_ds", "stats.field",
         all + "code_s", "stats.field", "{!sum=true}n_is");

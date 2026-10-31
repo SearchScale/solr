@@ -73,6 +73,8 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
     for (Agg a : aggs) (unique(a) ? unique : plain).add(a);
     List<NativeFacetCollector.Agg> nativeAggs = nativeAggs(searcher, plain);
     if (nativeAggs == null) return false;
+    // unique() reads every segment's bits: small domains (a bucket's) stay with Solr
+    if (!unique.isEmpty() && docs.size() < LuxirStatsAccelerator.minDocs) return false;
     for (Agg a : unique) {
       if (!uniqueField(searcher, a)) return false;
     }
@@ -234,7 +236,7 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
   }
 
   /** A doc set for the native collectors: a sorted int set's own docs, else bits. */
-  private static DocMatches matches(DocSet set, int maxDoc) {
+  static DocMatches matches(DocSet set, int maxDoc) {
     if (set instanceof SortedIntDocSet sorted)
       return DocMatches.of(sorted.getDocs(), sorted.size());
     return DocMatches.of(LuxirCodecQueryComponent.bits(set, maxDoc));

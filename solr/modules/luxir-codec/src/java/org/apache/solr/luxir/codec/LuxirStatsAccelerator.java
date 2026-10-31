@@ -37,6 +37,12 @@ final class LuxirStatsAccelerator implements StatsAccelerator {
   /** Fields whose stats were read natively (read by tests). */
   static final AtomicLong ACCELERATED = new AtomicLong();
 
+  /**
+   * Doc sets smaller than this are left to Solr's per-doc reading: bulk reading costs a pass over
+   * every segment's bits, and pivot stats ask for one small set per bucket.
+   */
+  static int minDocs = 4096;
+
   private LuxirStatsAccelerator() {}
 
   @Override
@@ -44,7 +50,9 @@ final class LuxirStatsAccelerator implements StatsAccelerator {
       throws IOException {
     DocValuesType type =
         field.getType().getNumberType() == null ? DocValuesType.SORTED : DocValuesType.NUMERIC;
-    if (field.multiValued() || !LuxirFacets.nativeField(searcher, field.getName(), type)) {
+    if (docs.size() < minDocs
+        || field.multiValued()
+        || !LuxirFacets.nativeField(searcher, field.getName(), type)) {
       return false;
     }
     FixedBitSet bits = LuxirCodecQueryComponent.bits(docs, searcher.maxDoc());

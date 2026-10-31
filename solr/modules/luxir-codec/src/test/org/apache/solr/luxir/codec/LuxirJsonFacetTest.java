@@ -178,11 +178,15 @@ public class LuxirJsonFacetTest extends SolrTestCaseJ4 {
     // a whole domain: unique() and hll() of string and point fields, single- and multi-valued,
     // natively, alone and with the plain aggregations
     long slot = accelerated(LuxirFacetAccelerator.SLOT);
+    int minDocs = LuxirStatsAccelerator.minDocs;
+    LuxirStatsAccelerator.minDocs = 1; // the test index is small
     facet("{u:'unique(kind_s)',c:'unique(cats_ss)',y:'unique(year_i)',n:'unique(n_is)'}");
     facet("{h:'hll(kind_s)',hc:'hll(cats_ss)',hy:'hll(pop_f)',hn:'hll(n_is)',ht:'hll(ts_dt)'}");
     facet("{u:'unique(ts_dt)',p:'unique(pop_f)'," + STATS + "}");
     facet("{q:{type:query,q:'year_i:[2000 TO *]',facet:{u:'unique(kind_s)',r:'unique(rev_l)',s:'sum(pop_f)'}}}");
     assertTrue("unique() and hll() collected natively", accelerated(LuxirFacetAccelerator.SLOT) > slot);
+    LuxirStatsAccelerator.minDocs = minDocs;
+    facet("{u:'unique(kind_s)',y:'unique(year_i)',s:'sum(pop_f)'}"); // small domains: Solr's
     // per bucket, and on a field without native doc values: Solr's path, same results
     facet("{k:{type:terms,field:kind_s,facet:{u:'unique(cats_ss)',y:'unique(year_i)'}}}");
     facet("{u:'unique(code_s)',h:'hll(code_s)',y:'unique(year_i)'}");
