@@ -179,8 +179,8 @@ public class LuxirCodecDifferentialTest extends SolrTestCaseJ4 {
       Map<String, Object> d = same("q", q, "df", "body", "fl", "id,score", "rows", "15");
       if (nativePath(d)) nativeCount++;
     }
-    // everything but the sloppy phrase (Lucene's sloppy scoring) and *:* (Solr's cached live docs)
-    assertEquals(queries.length - 2, nativeCount);
+    // everything but *:* (Solr's cached live docs); sloppy phrases run natively too
+    assertEquals(queries.length - 1, nativeCount);
   }
 
   @Test

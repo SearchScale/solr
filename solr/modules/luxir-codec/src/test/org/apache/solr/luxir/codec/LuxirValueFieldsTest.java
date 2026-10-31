@@ -461,6 +461,77 @@ public class LuxirValueFieldsTest extends SolrTestCaseJ4 {
   }
 
   @Test
+  public void testPagingGroupingAndOtherSolrPaths() throws Exception {
+    // deep pages, by score and by field
+    for (String start : new String[] {"100", "500", "1100"}) {
+      same("q", "body:text kind_s:k2", "fl", "id,score", "start", start, "rows", "20");
+      same("q", "*:*", "fl", "id", "sort", "year_i desc,id asc", "start", start, "rows", "20");
+    }
+    // cursorMark: every page, by field and by score (Solr's path over Luxir's queries)
+    for (String sort : new String[] {"year_i asc,id asc", "pop_f desc,id desc", "score desc,id asc"}) {
+      String mark = "*";
+      for (int page = 0; page < 40; page++) {
+        String[] p = {"q", "kind_s:k1 OR body:text", "fl", "id", "sort", sort, "rows", "37", "cursorMark", mark};
+        same(p);
+        String next = (String) query("/select", p).get("nextCursorMark");
+        if (next.equals(mark)) break;
+        mark = next;
+      }
+    }
+    // grouping and collapsing
+    same("q", "*:*", "fl", "id", "sort", "id asc", "group", "true", "group.field", "kind_s",
+        "group.limit", "3", "rows", "20");
+    same("q", "year_i:[2000 TO *]", "fl", "id", "group", "true", "group.query", "kind_s:k1",
+        "group.query", "pop_f:[0 TO *]", "group.sort", "id asc");
+    same("q", "*:*", "fq", "{!collapse field=kind_s sort='year_i desc,id asc'}", "fl", "id",
+        "sort", "id asc", "rows", "50");
+    // legacy range facets: floats, dates, longs; other and include
+    for (String include : new String[] {"lower", "upper", "edge", "outer", "all"}) {
+      same("q", "*:*", "rows", "0", "facet", "true", "facet.range", "pop_f",
+          "facet.range.start", "-30", "facet.range.end", "70", "facet.range.gap", "12.5",
+          "facet.range.other", "all", "facet.range.include", include, "facet.range.hardend",
+          "true");
+    }
+    same("q", "kind_s:k1 OR kind_s:k2", "rows", "0", "facet", "true", "facet.range", "ts_dt",
+        "facet.range.start", "2000-01-01T00:00:00Z", "facet.range.end", "2030-01-01T00:00:00Z",
+        "facet.range.gap", "+3YEARS", "facet.range.other", "before", "facet.range.other", "after",
+        "facet.mincount", "1");
+    same("q", "*:*", "rows", "0", "facet", "true", "facet.range", "rev_l", "facet.range.start",
+        "400000000000", "facet.range.end", "400000100000", "facet.range.gap", "7777",
+        "facet.range.other", "between", "facet.range.method", "dv");
+    // pivots, intervals, facet queries
+    same("q", "*:*", "rows", "0", "facet", "true", "facet.pivot", "kind_s,cats_ss",
+        "facet.limit", "4");
+    same("q", "*:*", "rows", "0", "facet", "true", "facet.interval", "year_i",
+        "f.year_i.facet.interval.set", "[1990,2000)", "f.year_i.facet.interval.set", "[2000,*]",
+        "facet.query", "pop_f:[0 TO 10]", "facet.query", "ts_dt:[2010-01-01T00:00:00Z TO *]");
+    // JSON facets: query, nested, prefix, missing, numBuckets, every aggregation
+    same("q", "*:*", "rows", "0", "json.facet",
+        "{q1:{type:query,q:\"year_i:[2000 TO *]\",facet:{a:\"avg(pop_f)\",m:\"min(rev_l)\"}},"
+            + "k:{type:terms,field:kind_s,missing:true,numBuckets:true,allBuckets:true,"
+            + "facet:{r:{type:range,field:year_i,start:1990,end:2030,gap:10},"
+            + "c:{type:terms,field:cats_ss,limit:2,sort:\"index asc\"}}},"
+            + "p:{type:terms,field:cats_ss,prefix:\"Cät 1\",limit:-1},"
+            + "y:{type:terms,field:year_i,limit:5,sort:\"s desc\",facet:{s:\"sum(pop_f)\"}},"
+            + "mn:\"min(pop_f)\",mx:\"max(q_ds)\",v:\"variance(year_i)\",sd:\"stddev(pop_f)\","
+            + "sq:\"sumsq(year_i)\",cv:\"countvals(n_is)\",ms:\"missing(pop_f)\","
+            + "pc:\"percentile(pop_f,10,50,90)\",h:\"hll(kind_s)\"}");
+    same("q", "body:text", "fq", "-kind_s:k3", "rows", "0", "json.facet",
+        "{d:{type:range,field:ts_dt,start:\"2000-01-01T00:00:00Z\",end:\"2030-01-01T00:00:00Z\","
+            + "gap:\"+5YEARS\",other:all,facet:{a:\"avg(year_i)\"}}}");
+    // function queries, frange, edismax with boosts, existence and negations
+    same("q", "{!frange l=2000 u=2010}year_i", "fl", "id", "sort", "id asc", "rows", "2000");
+    same("q", "{!edismax qf='body kind_s' bf='year_i' bq='kind_s:k2^3'}text k2", "fl",
+        "id,score", "sort", "score desc,id asc", "rows", "40");
+    same("q", "{!boost b=log(sum(1,year_i))}body:text", "fl", "id,score", "sort",
+        "score desc,id asc", "rows", "40");
+    same("q", "*:* -year_i:* -(kind_s:k1 -pop_f:[0 TO *])", "fl", "id", "sort", "id asc",
+        "rows", "2000");
+    same("q", "*:*", "fq", "-q_ds:[* TO 0]", "fq", "{!terms f=year_i}2000,2001,2002,2010",
+        "fl", "id", "sort", "rev_l desc,id asc", "rows", "100");
+  }
+
+  @Test
   public void testRealTimeGetAndUpdates() throws Exception {
     assumeTrue("needs the update log", h.getCore().getUpdateHandler().getUpdateLog() != null);
     assertU(
