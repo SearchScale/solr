@@ -22,6 +22,7 @@ import java.util.List;
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.util.FixedBitSet;
@@ -129,7 +130,7 @@ public class LuxirCodecQueryComponent extends QueryComponent {
     if (!rb.req.getSearcher().getStatsCache().getClass().equals(LocalStatsCache.class)) {
       return "distributed statistics";
     }
-    SortField fieldSort = fieldSort(rb);
+    Sort fieldSort = fieldSort(rb);
     if (fieldSort == null && rb.getSortSpec() != null && rb.getSortSpec().getSort() != null) {
       SortField[] fields = rb.getSortSpec().getSort().getSort();
       if (fields.length != 1
@@ -157,12 +158,16 @@ public class LuxirCodecQueryComponent extends QueryComponent {
     return null;
   }
 
-  /** The request's one field sort (not by score), or null. */
-  private static SortField fieldSort(ResponseBuilder rb) {
+  /** The request's field sort (one or more fields, none by score), or null. */
+  private static Sort fieldSort(ResponseBuilder rb) {
     SortSpec spec = rb.getSortSpec();
     if (spec == null || spec.getSort() == null) return null;
     SortField[] fields = spec.getSort().getSort();
-    return fields.length == 1 && fields[0].getType() != SortField.Type.SCORE ? fields[0] : null;
+    if (fields.length == 0) return null;
+    for (SortField f : fields) {
+      if (f.getType() == SortField.Type.SCORE) return null;
+    }
+    return spec.getSort();
   }
 
   private static void debugPath(ResponseBuilder rb, String path, String reason) {
@@ -269,7 +274,7 @@ public class LuxirCodecQueryComponent extends QueryComponent {
 
     // minExactCount: count exactly up to max(minExactCount, rows), as Lucene's collectors do.
     int minExactCount = needDocSet ? Integer.MAX_VALUE : cmd.getMinExactCount();
-    SortField sort = fieldSort(rb);
+    Sort sort = fieldSort(rb);
     LuxirSearch.Result res =
         sort != null
             ? LuxirSearch.topKSorted(

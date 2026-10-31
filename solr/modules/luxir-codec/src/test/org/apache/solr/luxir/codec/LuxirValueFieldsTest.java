@@ -429,6 +429,17 @@ public class LuxirValueFieldsTest extends SolrTestCaseJ4 {
           (Map<?, ?>) query("/select", "q", "*:*", "sort", sort, "debug", "true").get("debug");
       assertEquals(sort, List.of("path", "native"), debug.get("luxirCodec"));
     }
+    // several Luxir fields, ties decided by later fields, natively too
+    for (String sort :
+        new String[] {
+          "kind_s asc,year_i desc", "year_i desc,pop_f asc,kind_s desc", "kind_s desc,ts_dt asc,rev_l desc,year_i asc"
+        }) {
+      same("q", "*:*", "fl", "id", "sort", sort, "rows", "60");
+      same("q", "body:text", "fq", "-kind_s:k2", "fl", "id", "sort", sort, "rows", "25", "start", "5");
+      Map<?, ?> debug =
+          (Map<?, ?>) query("/select", "q", "*:*", "sort", sort, "debug", "true").get("debug");
+      assertEquals(sort, List.of("path", "native"), debug.get("luxirCodec"));
+    }
     // values: stored, and doc values as stored
     same(
         "q",
