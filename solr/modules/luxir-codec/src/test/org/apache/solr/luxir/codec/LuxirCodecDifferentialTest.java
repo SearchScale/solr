@@ -260,8 +260,16 @@ public class LuxirCodecDifferentialTest extends SolrTestCaseJ4 {
   public void testOtherShapesFallBackAndStillMatch() throws Exception {
     assertFalse(
         nativePath(same("q", "alpha", "df", "body", "fl", "id", "sort", "year asc, id asc")));
-    assertFalse(
+    // edismax over several fields is a dismax per term: native; with a boost function, not
+    assertTrue(
         nativePath(same("q", "{!edismax qf='title body' tie=0.1}alpha beta", "fl", "id,score")));
+    assertTrue(
+        nativePath(
+            same("q", "{!edismax qf='title^2 body' pf=body tie=0.3 mm=2}alpha beta gamma", "fl",
+                "id,score")));
+    assertFalse(
+        nativePath(
+            same("q", "{!edismax qf='title body' boost=sum(1,1)}alpha beta", "fl", "id,score")));
     assertFalse(
         nativePath(same("q", "body:fox", "fl", "id,score", "group", "true", "group.field", "cat")));
   }
