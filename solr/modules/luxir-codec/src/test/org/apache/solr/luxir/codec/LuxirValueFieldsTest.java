@@ -538,6 +538,18 @@ public class LuxirValueFieldsTest extends SolrTestCaseJ4 {
         "score desc,id asc", "rows", "40");
     same("q", "*:* -year_i:* -(kind_s:k1 -pop_f:[0 TO *])", "fl", "id", "sort", "id asc",
         "rows", "2000");
+    // purely negative queries: all docs but their clauses', on either path
+    // (tag_s:* and code_s:* are not native: they go through the accelerated wrapper)
+    for (String q :
+        new String[] {
+          "-kind_s:k1", "-year_i:[2000 TO *]", "-(body:text OR cats_ss:\"Cät 3\")", "-tag_s:*", "-code_s:*",
+          "-(tag_s:* OR kind_s:k2)"
+        }) {
+      same("q", q, "fl", "id", "sort", "id asc", "rows", "2000");
+      same("q", q, "fl", "id,score", "rows", "20");
+      same("q", q, "fl", "id", "sort", "year_i desc,id asc", "rows", "30");
+      same("q", q, "rows", "0");
+    }
     same("q", "*:*", "fq", "-q_ds:[* TO 0]", "fq", "{!terms f=year_i}2000,2001,2002,2010",
         "fl", "id", "sort", "rev_l desc,id asc", "rows", "100");
   }

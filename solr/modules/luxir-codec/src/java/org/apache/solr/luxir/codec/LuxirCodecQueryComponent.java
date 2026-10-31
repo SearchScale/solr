@@ -103,7 +103,8 @@ public class LuxirCodecQueryComponent extends QueryComponent {
       super.process(rb);
       return;
     }
-    rb.setQuery(new LuxirAcceleratedQuery(q));
+    // made queryable first: Solr fixes a purely negative query only when it sees it unwrapped
+    rb.setQuery(new LuxirAcceleratedQuery(QueryUtils.makeQueryable(q)));
     try {
       super.process(rb);
     } finally {
@@ -274,12 +275,14 @@ public class LuxirCodecQueryComponent extends QueryComponent {
 
     // minExactCount: count exactly up to max(minExactCount, rows), as Lucene's collectors do.
     int minExactCount = needDocSet ? Integer.MAX_VALUE : cmd.getMinExactCount();
+    // as SolrIndexSearcher searches it: a purely negative query matches all docs but its clauses'
+    Query query = QueryUtils.makeQueryable(cmd.getQuery());
     Sort sort = fieldSort(rb);
     LuxirSearch.Result res =
         sort != null
             ? LuxirSearch.topKSorted(
                 searcher,
-                cmd.getQuery(),
+                query,
                 nativeFilters,
                 sort,
                 k,
@@ -289,7 +292,7 @@ public class LuxirCodecQueryComponent extends QueryComponent {
                 true)
             : LuxirSearch.topK(
                 searcher,
-                cmd.getQuery(),
+                query,
                 nativeFilters,
                 k,
                 minExactCount,
@@ -299,7 +302,7 @@ public class LuxirCodecQueryComponent extends QueryComponent {
                 true);
     if (res == null) {
       if (rb.isDebug()) {
-        debugPath(rb, "lucene", LuxirSearch.whyNotNative(searcher, cmd.getQuery(), nativeFilters));
+        debugPath(rb, "lucene", LuxirSearch.whyNotNative(searcher, query, nativeFilters));
       }
       return false;
     }
