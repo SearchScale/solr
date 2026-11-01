@@ -47,6 +47,10 @@
   <field name="q_ds" type="lx_double" indexed="true" stored="false" multiValued="true"/>
   <field name="n_is" type="lx_int" indexed="true" stored="true" multiValued="true"/>
   <field name="ts_dt" type="lx_date" indexed="true" stored="false"/>
+  <!-- stored values read back as the Solr type's objects; a text field named like a string field -->
+  <field name="stamp_dt" type="lx_date" indexed="true" stored="true"/>
+  <field name="stamp_ref" type="pdate" indexed="true" stored="true"/>
+  <field name="label_s" type="text_lx" indexed="true" stored="true"/>
 
   <field name="kind_ref" type="string" indexed="true" stored="false"/>
   <field name="cats_ref" type="string" indexed="true" stored="false" multiValued="true"/>

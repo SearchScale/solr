@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.IndexableField;
+import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
 import org.luxir.lucene.document.LuxirValueField;
@@ -35,8 +36,12 @@ import org.luxir.lucene.document.LuxirValueField;
  * Lucene deletes by term); doc-values-only and stored-only fields (and in-place updates) take the
  * standard path. Indexed string values are limited to 255 UTF-8 bytes. Requires {@link
  * LuxirCodecFactory}.
+ *
+ * <p>Stored values reach clients as the Solr type's objects (numbers, dates), as for the type it
+ * extends: Solr sends the stored values of a field type it does not know as strings unless the type
+ * is {@link FieldType.ExternalizeStoredValuesAsObjects}.
  */
-public interface LuxirValueType {
+public interface LuxirValueType extends FieldType.ExternalizeStoredValuesAsObjects {
   /** Whether a field of a Luxir value type is indexed natively. */
   static boolean nativeField(IndexSchema schema, SchemaField sf) {
     if (!sf.indexed()) return false;

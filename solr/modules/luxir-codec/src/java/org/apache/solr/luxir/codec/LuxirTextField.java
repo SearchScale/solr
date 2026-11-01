@@ -25,6 +25,7 @@ import org.apache.lucene.analysis.core.KeywordTokenizer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.index.IndexableField;
 import org.apache.solr.common.util.ByteArrayUtf8CharSequence;
+import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.schema.TextField;
@@ -44,7 +45,7 @@ import org.luxir.lucene.analysis.LuxirAnalyzer;
  * The analyzer is a Luxir AnalyzerDef (default {@link LuxirAnalyzer#ENGLISH}). Requires {@link
  * LuxirCodecFactory}. Dynamic fields of this type must be suffix patterns ({@code *_xx}).
  */
-public class LuxirTextField extends TextField {
+public class LuxirTextField extends TextField implements FieldType.ExternalizeStoredValuesAsObjects {
   public static final String ANALYZER_ARG = "luxirAnalyzer";
 
   private String analyzerJson;

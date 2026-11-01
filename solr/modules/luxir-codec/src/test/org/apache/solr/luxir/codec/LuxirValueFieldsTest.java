@@ -17,10 +17,12 @@
 package org.apache.solr.luxir.codec;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import org.apache.lucene.document.StoredField;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FilterLeafReader;
 import org.apache.lucene.index.LeafReader;
@@ -29,7 +31,9 @@ import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.common.util.ContentStreamBase;
 import org.apache.solr.common.util.Utils;
 import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.response.DocsStreamer;
 import org.apache.solr.response.SolrQueryResponse;
+import org.apache.solr.schema.IndexSchema;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -602,6 +606,62 @@ public class LuxirValueFieldsTest extends SolrTestCaseJ4 {
     assertU(commit());
     assertEquals(
         0L, ((Map<?, ?>) query("/lucene", "q", "kind_s:k9").get("response")).get("numFound"));
+  }
+
+  @Test
+  public void testStoredValuesAndFieldNames() throws Exception {
+    // stored values as Solr hands them to clients (DocsStreamer, as shards send documents): the
+    // types' objects, as for the stock types, not the strings Solr makes of an unknown type's values
+    IndexSchema schema = h.getCore().getLatestSchema();
+    assertEquals(7L, DocsStreamer.getValue(schema.getField("rev_l"), new StoredField("rev_l", 7L)));
+    assertEquals(4, DocsStreamer.getValue(schema.getField("n_is"), new StoredField("n_is", 4)));
+    assertEquals(1.5f, DocsStreamer.getValue(schema.getField("pop_f"), new StoredField("pop_f", 1.5f)));
+    assertEquals(-2.5, DocsStreamer.getValue(schema.getField("q_ds"), new StoredField("q_ds", -2.5)));
+    assertEquals(
+        new Date(981173106000L),
+        DocsStreamer.getValue(schema.getField("stamp_dt"), new StoredField("stamp_dt", 981173106000L)));
+    assertEquals("k1", DocsStreamer.getValue(schema.getField("tag_s"), new StoredField("tag_s", "k1")));
+    String[] fields = {
+      "rev_l", "123456789012", "n_is", "4", "n_is", "-5", "stamp_dt", "2001-02-03T04:05:06Z",
+      "stamp_ref", "2001-02-03T04:05:06Z", "label_s", "Red Fox Lodge"
+    };
+    List<String> a = new ArrayList<>(List.of("id", id(8000)));
+    a.addAll(List.of(fields));
+    assertU(adoc(a.toArray(String[]::new)));
+    StringBuilder json = new StringBuilder("[{\"id\":\"" + id(8001) + "\"");
+    for (int k = 0; k < fields.length; k += 2) {
+      boolean number = fields[k].matches("(rev|n)_.*");
+      json.append(",\"").append(fields[k]).append("\":");
+      json.append(number ? fields[k + 1] : "\"" + fields[k + 1] + "\"");
+    }
+    post("/update", json.append("}]").toString()); // the fast JSON loader, without repeated keys
+    assertU(commit());
+    try {
+      for (String id : new String[] {id(8000), id(8001)}) {
+        // read from stored fields (fl=*, real-time get): as the stock types return them, not as
+        // strings, which Solr sends for a field type it does not know
+        Map<?, ?> doc =
+            (Map<?, ?>)
+                ((List<?>) ((Map<?, ?>) query("/select", "q", "id:" + id, "fl", "*").get("response")).get("docs"))
+                    .get(0);
+        Map<?, ?> got = (Map<?, ?>) query("/get", "id", id, "fl", "*").get("doc");
+        for (Map<?, ?> d : List.of(doc, got)) {
+          assertEquals(id + " " + d, 123456789012L, d.get("rev_l"));
+          assertEquals(id + " " + d, d.get("stamp_ref"), d.get("stamp_dt"));
+          if (id.equals(id(8000))) assertEquals(id + " " + d, List.of(4L, -5L), d.get("n_is"));
+        }
+        // a native text field whose name has a string suffix ("_s") runs natively
+        for (String q : new String[] {"label_s:fox", "label_s:\"red fox\"", "+label_s:lodge +rev_l:123456789012"}) {
+          Map<?, ?> rsp = query("/select", "q", q, "fq", "id:" + id, "debug", "true");
+          assertEquals(q, 1L, ((Map<?, ?>) rsp.get("response")).get("numFound"));
+          Object path = ((Map<?, ?>) rsp.get("debug")).get("luxirCodec");
+          assertEquals(q + " " + path, "native", ((List<?>) path).get(1));
+        }
+      }
+    } finally {
+      assertU(delQ("id:(" + id(8000) + " " + id(8001) + ")"));
+      assertU(commit());
+    }
   }
 
   @Test
