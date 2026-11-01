@@ -201,6 +201,9 @@ public interface FacetAccelerator {
       }
       return true;
     }
+    // uniqueBlock() counts blocks (by a field or a query), not values: its accumulator only extends
+    // unique()'s
+    if (acc instanceof UniqueBlockAgg.UniqueBlockSlotAcc) return false;
     if (acc instanceof UniqueOrds u && acc instanceof UniqueSlotAcc us) {
       out.add(new Agg(Op.UNIQUE_ORDS, us.field.getName(), null, null, null, null, null, null, u));
       return true;
