@@ -83,6 +83,7 @@ public class LuxirRangeFacetProcessor extends RangeFacetProcessor {
     DocValuesType dv = sf.multiValued() ? DocValuesType.SORTED_NUMERIC : DocValuesType.NUMERIC;
     if (!LuxirFacets.nativeField(searcher, sf.getName(), dv)) return null;
     List<RangeFacetRequest.FacetRange> ranges = rfr.getFacetRanges();
+    if (LuxirFacetAccelerator.fewRangesOverMostDocs(ranges.size(), subset.size(), searcher.maxDoc())) return null;
     Query[] queries = new Query[ranges.size()];
     for (int i = 0; i < ranges.size(); i++) {
       RangeFacetRequest.FacetRange fr = ranges.get(i);

@@ -21,7 +21,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.lucene.index.DocValues;
@@ -324,6 +323,56 @@ public class LuxirSimpleFacets extends SimpleFacets {
     int docID;
   }
 
+  /** Value bits to a count and a first doc: open addressing over primitive arrays. */
+  private static final class ValueTable {
+    long[] keys = new long[64];
+    long[] counts = new long[64];
+    int[] firsts = new int[64];
+    boolean[] used = new boolean[64];
+    int size;
+
+    void add(long key, long count, int first) {
+      if (size * 2 >= keys.length) grow();
+      int slot = find(key);
+      if (used[slot]) {
+        counts[slot] += count;
+        firsts[slot] = Math.min(firsts[slot], first);
+      } else {
+        used[slot] = true;
+        keys[slot] = key;
+        counts[slot] = count;
+        firsts[slot] = first;
+        size++;
+      }
+    }
+
+    private int find(long key) {
+      int mask = keys.length - 1;
+      long h = key * 0x9E3779B97F4A7C15L; // Fibonacci hashing: near values spread over the table
+      int slot = (int) ((h ^ (h >>> 32)) & mask);
+      while (used[slot] && keys[slot] != key) slot = (slot + 1) & mask;
+      return slot;
+    }
+
+    private void grow() {
+      long[] k = keys, c = counts;
+      int[] f = firsts;
+      boolean[] u = used;
+      keys = new long[k.length * 2];
+      counts = new long[k.length * 2];
+      firsts = new int[k.length * 2];
+      used = new boolean[k.length * 2];
+      for (int i = 0; i < k.length; i++) {
+        if (!u[i]) continue;
+        int slot = find(k[i]);
+        used[slot] = true;
+        keys[slot] = k[i];
+        counts[slot] = c[i];
+        firsts[slot] = f[i];
+      }
+    }
+  }
+
   /** NumericFacets' single-valued point path (no zeros), counting natively. */
   private NamedList<Integer> numericCounts(
       SchemaField sf,
@@ -339,8 +388,9 @@ public class LuxirSimpleFacets extends SimpleFacets {
         ft.getNumberType() == org.apache.solr.schema.NumberType.FLOAT
             || ft.getNumberType() == org.apache.solr.schema.NumberType.DOUBLE;
     List<LeafReaderContext> leaves = searcher.getIndexReader().leaves();
-    // 1. accumulate: value bits -> {count, first doc}
-    Map<Long, long[]> table = new HashMap<>();
+    // 1. accumulate: value bits -> {count, first doc}, in primitive arrays: near-unique fields (dates,
+    // ids) give a value per doc, which boxed map entries would turn into garbage
+    ValueTable table = new ValueTable();
     int missingCount = 0;
     for (LeafReaderContext leaf : leaves) {
       LuxirFacets.ValueCounts vc =
@@ -351,13 +401,7 @@ public class LuxirSimpleFacets extends SimpleFacets {
         long bits = vc.values()[i];
         // NumericFacets' order-preserving flip for float/double bits
         if (flip && bits < 0) bits ^= 0x7fffffffffffffffL;
-        long[] e = table.get(bits);
-        if (e == null) {
-          table.put(bits, new long[] {vc.counts()[i], vc.firstDocs()[i]});
-        } else {
-          e[0] += vc.counts()[i];
-          e[1] = Math.min(e[1], vc.firstDocs()[i]);
-        }
+        table.add(bits, vc.counts()[i], vc.firstDocs()[i]);
       }
     }
     NamedList<Integer> result = new NamedList<>();
@@ -366,7 +410,7 @@ public class LuxirSimpleFacets extends SimpleFacets {
       return result;
     }
     // 2. select top-k facet values
-    int pqSize = limit < 0 ? table.size() : Math.min(offset + limit, table.size());
+    int pqSize = limit < 0 ? table.size : Math.min(offset + limit, table.size);
     PriorityQueue<Entry> pq;
     if (FacetParams.FACET_SORT_COUNT.equals(sort)
         || FacetParams.FACET_SORT_COUNT_LEGACY.equals(sort)) {
@@ -387,12 +431,12 @@ public class LuxirSimpleFacets extends SimpleFacets {
           };
     }
     Entry e = null;
-    for (Map.Entry<Long, long[]> t : table.entrySet()) {
-      if (t.getValue()[0] >= mincount) {
+    for (int slot = 0; slot < table.keys.length; slot++) {
+      if (table.used[slot] && table.counts[slot] >= mincount) {
         if (e == null) e = new Entry();
-        e.bits = t.getKey();
-        e.count = (int) t.getValue()[0];
-        e.docID = (int) t.getValue()[1];
+        e.bits = table.keys[slot];
+        e.count = (int) table.counts[slot];
+        e.docID = table.firsts[slot];
         e = pq.insertWithOverflow(e);
       }
     }

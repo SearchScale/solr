@@ -191,6 +191,9 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
     if (bounds == null) return false;
     List<NativeFacetCollector.Agg> nativeAggs = nativeAggs(searcher, aggs);
     if (nativeAggs == null) return false;
+    if (nativeAggs.isEmpty() && fewRangesOverMostDocs(rangeQueries.length, fcontext.getBase().size(), searcher.maxDoc())) {
+      return false;
+    }
     DocMatches matches = matches(fcontext.getBase(), searcher.maxDoc());
     int kind = LuxirRangeFacetProcessor.kind(field);
     long[] counts;
@@ -204,6 +207,15 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
     addCounts(slotCounts, counts);
     ACCELERATED.incrementAndGet(RANGES);
     return true;
+  }
+
+  /**
+   * Whether counting a few ranges over (nearly) every doc is better left to Solr: it counts each
+   * range's docs from the points (and its filter cache keeps them across requests) without visiting
+   * every matching doc's values, as native collection does.
+   */
+  static boolean fewRangesOverMostDocs(int ranges, int baseSize, int maxDoc) {
+    return ranges <= 64 && baseSize * 10L >= maxDoc * 9L;
   }
 
   @Override
