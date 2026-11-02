@@ -155,6 +155,14 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
     }
     List<NativeFacetCollector.Agg> nativeAggs = nativeAggs(searcher, aggs);
     if (nativeAggs == null) return false;
+    // Native counting maps every segment ordinal to its slot and hands back a count per slot: work
+    // in proportion to the field's terms. With few matches among many terms (a near-unique field
+    // over a filter), Solr's per-doc counting does less.
+    long segOrdsTotal = 0;
+    for (LeafReaderContext leaf : searcher.getTopReaderContext().leaves()) {
+      segOrdsTotal += DocValues.getSortedSet(leaf.reader(), field.getName()).getValueCount();
+    }
+    if (fcontext.getBase().size() * 4L < segOrdsTotal) return false;
     DocMatches matches = matches(fcontext.getBase(), searcher.maxDoc());
     long[] counts;
     try (NativeFacetCollector c = new NativeFacetCollector(nativeAggs, -1, nTerms)) {
@@ -275,6 +283,21 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
    * The aggregations as native ones: each over a single-valued point field with doc values kept
    * natively in every segment; null if one is not.
    */
+  // Solr's operations and value types as the native collector's (same names), by ordinal
+  private static final NativeFacetCollector.Op[] NATIVE_OPS =
+      java.util.Arrays.stream(Op.values()).map(o -> nativeEnum(NativeFacetCollector.Op.class, o.name()))
+          .toArray(NativeFacetCollector.Op[]::new);
+  private static final NativeFacetCollector.ValueType[] NATIVE_VALUES =
+      java.util.Arrays.stream(Values.values()).map(v -> nativeEnum(NativeFacetCollector.ValueType.class, v.name()))
+          .toArray(NativeFacetCollector.ValueType[]::new);
+
+  private static <E extends Enum<E>> E nativeEnum(Class<E> type, String name) {
+    for (E e : type.getEnumConstants()) {
+      if (e.name().equals(name)) return e;
+    }
+    return null; // not a native operation (its aggregations are left to Solr before they get here)
+  }
+
   private static List<NativeFacetCollector.Agg> nativeAggs(
       SolrIndexSearcher searcher, List<Agg> aggs) {
     List<NativeFacetCollector.Agg> out = new ArrayList<>(aggs.size());
@@ -284,9 +307,9 @@ final class LuxirFacetAccelerator implements FacetAccelerator {
       if (sf == null || sf.multiValued() || !pointField(searcher, sf)) return null;
       out.add(
           new NativeFacetCollector.Agg(
-              NativeFacetCollector.Op.valueOf(a.op().name()),
+              NATIVE_OPS[a.op().ordinal()],
               a.field(),
-              NativeFacetCollector.ValueType.valueOf(a.values().name()),
+              NATIVE_VALUES[a.values().ordinal()],
               a.d0(),
               a.d1(),
               a.l0(),
